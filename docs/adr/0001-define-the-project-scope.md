@@ -1,4 +1,4 @@
-# ADR-0001: Position the project as bioinformatics platform engineering
+# ADR-0001: Define the project scope as a bioinformatics workflow platform
 
 ## Status
 
@@ -10,15 +10,17 @@ Proposed
 
 ## Context
 
-The project is intended to support a career transition from general software engineering into bioinformatics / life sciences technology.
+Bioinformatics workflows often require reproducible execution, clear metadata tracking, structured outputs, and accessible reports. This project explores how software engineering practices can be applied to a small bioinformatics workflow platform.
 
-The goal is not to present the author as a wet-lab scientist or clinical bioinformatician. Instead, the project should demonstrate that software engineering practices can be applied to bioinformatics workflows: reproducible execution, workflow tracking, metadata management, reporting, and platform/API design.
+The MVP should demonstrate platform-engineering concerns around workflow execution, run tracking, metadata management, reporting, and future extensibility.
+
+The project is intentionally limited to sequencing quality-control workflows. It does not aim to provide clinical interpretation, diagnosis, wet-lab protocol design, or variant pathogenicity classification.
 
 ## Decision
 
-We will position the project as a **bioinformatics workflow platform** rather than as a biological interpretation project.
+We will build a small bioinformatics workflow platform focused on running, tracking, and reporting reproducible sequencing quality-control workflows.
 
-The MVP will focus on running and tracking a simple sequencing quality-control workflow. It will not attempt clinical interpretation, diagnosis, variant pathogenicity classification, or any patient-facing use case.
+The initial workflow will prioritize a simple and understandable use case over biological complexity.
 
 ## Alternatives considered
 
@@ -32,13 +34,14 @@ Rejected. It would be too close to standard web development and would not demons
 
 ### Build a small workflow platform around sequencing QC
 
-Accepted. It is realistic, safer, and aligned with platform/data engineering roles in bioinformatics.
+Accepted. It is realistic, focused, technically relevant, and aligned with bioinformatics platform/data engineering roles.
 
 ## Consequences
 
-- The project demonstrates engineering maturity without overclaiming biological expertise.
-- The project can be discussed honestly in interviews as a platform-engineering portfolio project.
-- The first workflow can stay simple while leaving room for future extensions such as alignment, variant calling, or cloud execution.
+- The project has a clear and honest technical scope.
+- The MVP can demonstrate reproducibility, workflow tracking, reporting, and platform design without overclaiming biological or clinical expertise.
+- The first workflow can stay simple while leaving room for future extensions such as alignment, variant calling, cloud execution, or more advanced reporting.
+- The project can be discussed in interviews as a platform-engineering portfolio project applied to bioinformatics workflows.
 
 ## Sources
 

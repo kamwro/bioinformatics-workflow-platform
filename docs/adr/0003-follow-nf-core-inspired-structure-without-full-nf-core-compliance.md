@@ -1,4 +1,4 @@
-# ADR-0003: Follow nf-core-inspired structure without full nf-core compliance
+# ADR-0003: Use selected nf-core conventions without claiming nf-core compliance
 
 ## Status
 
@@ -16,9 +16,9 @@ We want to borrow practical conventions: clear parameters, samplesheet-based inp
 
 ## Decision
 
-We will follow **nf-core-inspired patterns** but will not claim full nf-core compliance in the MVP.
+We will follow selected nf-core conventions where they improve readability, reproducibility, and maintainability.
 
-The README and documentation should explicitly say that the project is "nf-core-inspired" rather than "an nf-core pipeline".
+The project will not claim to be an official nf-core pipeline or fully nf-core compliant in the MVP.
 
 ## Alternatives considered
 
