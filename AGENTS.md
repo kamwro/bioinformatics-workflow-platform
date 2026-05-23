@@ -15,6 +15,7 @@ FastQC and MultiQC.
 - FastAPI API for QC workflow run metadata.
 - PostgreSQL for metadata only.
 - Local/demo metadata seeding endpoint.
+- Completed local Nextflow QC run registration endpoint.
 - Minimal Nextflow workflow: FASTQ to FastQC to MultiQC.
 - Tiny synthetic FASTQ fixtures for local testing.
 - Documentation and ADRs that match the implementation.
@@ -34,6 +35,8 @@ FastQC and MultiQC.
 - FastAPI handles platform/API concerns.
 - PostgreSQL stores metadata and paths only.
 - Nextflow handles workflow execution.
+- The API may register metadata for completed local Nextflow runs, but must not
+  start, monitor, or parse workflow executions yet.
 - FastQC performs per-sample quality assessment.
 - MultiQC aggregates FastQC outputs into one report.
 - Files and reports live on the filesystem for the MVP and may move to artifact
@@ -63,6 +66,12 @@ Seed demo metadata:
 
 ```bash
 curl -X POST http://localhost:8000/qc-runs/seed
+```
+
+Register completed local QC run metadata:
+
+```bash
+curl -X POST http://localhost:8000/qc-runs/register-local
 ```
 
 Run tests:
@@ -124,4 +133,6 @@ nextflow run pipelines/qc/main.nf -profile docker
 - Use SQLite overrides for ordinary API tests.
 - Cover health, seeding, listing, get-by-id, create behavior, and status
   serialization/model behavior.
+- Cover completed local QC run registration behavior when changing that
+  endpoint, schema, or service.
 - Run `uv run pytest` before finishing when possible.
