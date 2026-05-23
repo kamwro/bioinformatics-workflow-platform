@@ -1,8 +1,10 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.qc_run import QcRunStatus
-from app.schemas.qc_run import QcRunCreate, QcRunRead
+from app.schemas.qc_run import QcRunCreate, QcRunRead, QcRunRegisterLocal
 from app.services.qc_runs import QcRunService
 
 
@@ -60,7 +62,54 @@ def test_create_qc_run(client: TestClient) -> None:
     assert response.status_code == 201
     body = response.json()
     assert body["sample_name"] == "sample_03"
+    assert body["run_name"] == "sample_03"
+    assert body["workflow_engine"] == "nextflow"
     assert body["status"] == "RUNNING"
+
+
+def test_register_completed_local_qc_run_endpoint(client: TestClient) -> None:
+    response = client.post(
+        "/qc-runs/register-local",
+        json={
+            "run_name": "local-qc-2026-05-23",
+            "workflow_name": "fastqc-multiqc",
+            "status": "COMPLETED",
+            "output_path": "results/qc",
+            "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
+            "started_at": "2026-05-23T08:00:00Z",
+            "completed_at": "2026-05-23T08:07:00Z",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["run_name"] == "local-qc-2026-05-23"
+    assert body["sample_name"] is None
+    assert body["workflow_engine"] == "nextflow"
+    assert body["status"] == "COMPLETED"
+    assert body["input_path"] is None
+    assert body["output_path"] == "results/qc"
+    assert body["multiqc_report_path"] == "results/qc/multiqc/multiqc_report.html"
+    assert body["completed_at"].startswith("2026-05-23T08:07:00")
+
+
+def test_register_local_qc_run_requires_completed_status(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/qc-runs/register-local",
+        json={
+            "run_name": "local-qc-running",
+            "workflow_name": "fastqc-multiqc",
+            "status": "RUNNING",
+            "output_path": "results/qc",
+            "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
+            "started_at": "2026-05-23T08:00:00Z",
+            "completed_at": "2026-05-23T08:07:00Z",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_database_service_creates_run(db: Session) -> None:
@@ -76,6 +125,33 @@ def test_database_service_creates_run(db: Session) -> None:
 
     assert run.id is not None
     assert service.get_run(run.id).sample_name == "db_sample"
+
+
+def test_service_registers_completed_local_qc_run(db: Session) -> None:
+    service = QcRunService(db)
+    started_at = datetime(2026, 5, 23, 8, 0, tzinfo=UTC)
+    completed_at = started_at + timedelta(minutes=7)
+
+    run = service.register_completed_local_run(
+        QcRunRegisterLocal(
+            run_name="service-local-qc",
+            workflow_name="fastqc-multiqc",
+            output_path="results/qc",
+            multiqc_report_path="results/qc/multiqc/multiqc_report.html",
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+    )
+
+    assert run.id is not None
+    assert run.run_name == "service-local-qc"
+    assert run.sample_name is None
+    assert run.workflow_engine == "nextflow"
+    assert run.status == QcRunStatus.COMPLETED
+    assert run.output_dir == "results/qc"
+    assert run.report_path == "results/qc/multiqc/multiqc_report.html"
+    assert run.finished_at is not None
+    assert run.finished_at.replace(tzinfo=UTC) == completed_at
 
 
 def test_status_serialization_from_model(db: Session) -> None:
@@ -94,3 +170,4 @@ def test_status_serialization_from_model(db: Session) -> None:
 
     assert payload["status"] == "COMPLETED"
     assert payload["report_path"] == "results/qc/multiqc/multiqc_report.html"
+    assert payload["multiqc_report_path"] == "results/qc/multiqc/multiqc_report.html"

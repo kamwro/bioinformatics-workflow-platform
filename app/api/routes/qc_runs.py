@@ -3,7 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_qc_run_service
-from app.schemas.qc_run import QcRunCreate, QcRunRead, QcRunSeedResponse
+from app.schemas.qc_run import (
+    QcRunCreate,
+    QcRunRead,
+    QcRunRegisterLocal,
+    QcRunSeedResponse,
+)
 from app.services.qc_runs import QcRunService
 
 router = APIRouter(prefix="/qc-runs", tags=["qc-runs"])
@@ -32,6 +37,15 @@ def list_qc_runs(service: QcRunServiceDep):
 @router.post("", response_model=QcRunRead, status_code=status.HTTP_201_CREATED)
 def create_qc_run(body: QcRunCreate, service: QcRunServiceDep):
     return service.create_run(body)
+
+
+@router.post(
+    "/register-local",
+    response_model=QcRunRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def register_local_qc_run(body: QcRunRegisterLocal, service: QcRunServiceDep):
+    return service.register_completed_local_run(body)
 
 
 @router.get("/{run_id}", response_model=QcRunRead)

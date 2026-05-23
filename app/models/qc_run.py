@@ -26,11 +26,22 @@ class QcRun(Base):
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )
-    sample_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    run_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    sample_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        index=True,
+    )
     workflow_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
         default="fastqc-multiqc",
+        index=True,
+    )
+    workflow_engine: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="nextflow",
         index=True,
     )
     workflow_version: Mapped[str] = mapped_column(
@@ -50,7 +61,7 @@ class QcRun(Base):
         default=QcRunStatus.PENDING,
         index=True,
     )
-    input_path: Mapped[str] = mapped_column(Text, nullable=False)
+    input_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_dir: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -73,3 +84,15 @@ class QcRun(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    @property
+    def output_path(self) -> str | None:
+        return self.output_dir
+
+    @property
+    def multiqc_report_path(self) -> str | None:
+        return self.report_path
+
+    @property
+    def completed_at(self) -> datetime | None:
+        return self.finished_at

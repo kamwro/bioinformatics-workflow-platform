@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.qc_run import QcRun, QcRunStatus
 from app.repositories.qc_runs import QcRunRepository
-from app.schemas.qc_run import QcRunCreate
+from app.schemas.qc_run import QcRunCreate, QcRunRegisterLocal
 
 
 class QcRunService:
@@ -23,6 +23,22 @@ class QcRunService:
 
     def create_run(self, data: QcRunCreate) -> QcRun:
         return self.repo.create(data)
+
+    def register_completed_local_run(self, data: QcRunRegisterLocal) -> QcRun:
+        run = QcRun(
+            run_name=data.run_name,
+            sample_name=None,
+            workflow_name=data.workflow_name,
+            workflow_engine=data.workflow_engine,
+            workflow_version=data.workflow_version,
+            status=data.status,
+            input_path=None,
+            output_dir=data.output_path,
+            report_path=data.multiqc_report_path,
+            started_at=data.started_at,
+            finished_at=data.completed_at,
+        )
+        return self.repo.save(run)
 
     def seed_demo_runs(self) -> list[QcRun]:
         now = datetime.now(UTC)
