@@ -1,0 +1,44 @@
+[project]
+name = "bioflowops"
+version = "0.1.0"
+description = "Bioinformatics workflow platform skeleton for QC metadata tracking"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "psycopg[binary]>=3.2.3",
+    "sqlalchemy>=2.0.36",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28.0",
+    "mypy>=1.13.0",
+    "pytest>=8.3.4",
+    "ruff>=0.8.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.13"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

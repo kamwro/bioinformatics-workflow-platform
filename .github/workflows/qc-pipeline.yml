@@ -1,0 +1,42 @@
+name: QC Pipeline CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pipelines/qc/**"
+      - ".github/workflows/qc-pipeline.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "pipelines/qc/**"
+      - ".github/workflows/qc-pipeline.yml"
+
+jobs:
+  nextflow:
+    name: Run Nextflow QC Workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Nextflow
+        uses: nf-core/setup-nextflow@v2
+
+      - name: Validate samplesheet FASTQ paths
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          with Path("pipelines/qc/samplesheet.csv").open(newline="") as handle:
+              for row in csv.DictReader(handle):
+                  fastq = Path(row["fastq"])
+                  if not fastq.exists():
+                      raise SystemExit(f"Missing FASTQ fixture: {fastq}")
+                  line_count = len(fastq.read_text().splitlines())
+                  if line_count % 4 != 0:
+                      raise SystemExit(f"Invalid FASTQ line count in {fastq}")
+          PY
+
+      - name: Run QC workflow with Docker
+        run: nextflow run pipelines/qc/main.nf -profile docker

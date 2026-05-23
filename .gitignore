@@ -218,3 +218,12 @@ __marimo__/
 .streamlit/secrets.toml
 
 .idea
+
+# BioFlowOps local runtime artifacts
+.nextflow/
+.nextflow.log*
+work/
+results/
+postgres_data/
+*.db
+*.sqlite

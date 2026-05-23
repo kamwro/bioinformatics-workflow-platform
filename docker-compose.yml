@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: bioflowops-postgres
+    environment:
+      POSTGRES_DB: bioflowops
+      POSTGRES_USER: bioflowops
+      POSTGRES_PASSWORD: bioflowops
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres18_cluster:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bioflowops -d bioflowops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres18_cluster:
