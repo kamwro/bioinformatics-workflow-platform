@@ -17,12 +17,15 @@ class QcRunRepository:
         stmt = select(QcRun).where(QcRun.id == run_id)
         return self.db.scalars(stmt).first()
 
-    def create(self, data: QcRunCreate) -> QcRun:
-        run = QcRun(**data.model_dump())
+    def save(self, run: QcRun) -> QcRun:
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
         return run
+
+    def create(self, data: QcRunCreate) -> QcRun:
+        run = QcRun(**data.model_dump())
+        return self.save(run)
 
     def create_many(self, records: list[QcRunCreate]) -> list[QcRun]:
         runs = [QcRun(**record.model_dump()) for record in records]

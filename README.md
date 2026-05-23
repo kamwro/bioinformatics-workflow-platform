@@ -142,6 +142,26 @@ curl -X POST http://localhost:8000/qc-runs \
 
 The API records paths and statuses only. It does not execute Nextflow yet.
 
+Register a completed local Nextflow QC run:
+
+```bash
+curl -X POST http://localhost:8000/qc-runs/register-local \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_name": "local-qc-2026-05-23",
+    "workflow_name": "fastqc-multiqc",
+    "workflow_engine": "nextflow",
+    "status": "COMPLETED",
+    "output_path": "results/qc",
+    "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
+    "started_at": "2026-05-23T10:00:00Z",
+    "completed_at": "2026-05-23T10:05:00Z"
+  }'
+```
+
+This endpoint only stores metadata for a run that already completed outside
+the API. It does not start, monitor, or parse a Nextflow execution.
+
 ## Run Tests
 
 ```bash
@@ -185,7 +205,20 @@ Expected outputs:
 - `results/qc/multiqc/` - combined MultiQC report and data directory
 
 After running the workflow, metadata can be registered through the API with
-paths such as `results/qc/multiqc/multiqc_report.html`.
+paths such as `results/qc/multiqc/multiqc_report.html`:
+
+```bash
+curl -X POST http://localhost:8000/qc-runs/register-local \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_name": "local-qc-demo",
+    "workflow_name": "fastqc-multiqc",
+    "output_path": "results/qc",
+    "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
+    "started_at": "2026-05-23T10:00:00Z",
+    "completed_at": "2026-05-23T10:05:00Z"
+  }'
+```
 
 ## Known limitations
 
@@ -194,12 +227,12 @@ Alembic migrations, does not execute Nextflow from the API yet, has no frontend,
 no authentication, no cloud/Kubernetes deployment, and stores only metadata in
 PostgreSQL.
 
-The next best step is to add a small endpoint or command for registering a
-completed local workflow run before adding any UI.
+The API can register completed local workflow runs, but it intentionally does
+not execute or monitor Nextflow yet.
 
 ## Next Steps
 
 1. Add Alembic once schema changes start accumulating.
-2. Add a small service that registers a completed local Nextflow run.
-3. Add pagination/filtering for QC run metadata.
+2. Add pagination/filtering for QC run metadata.
+3. Consider a small CLI helper for registering local runs after Nextflow exits.
 4. Add a minimal frontend only after the API and workflow boundary are stable.

@@ -13,6 +13,7 @@ The API exposes metadata endpoints for QC workflow runs:
 - `POST /qc-runs/seed`
 - `GET /qc-runs`
 - `POST /qc-runs`
+- `POST /qc-runs/register-local`
 - `GET /qc-runs/{run_id}`
 
 It does not execute Nextflow in this MVP. It registers and exposes metadata
@@ -23,11 +24,13 @@ records that point to inputs, output directories, and reports.
 PostgreSQL stores structured metadata:
 
 - sample name
+- run name
 - workflow name and version
+- workflow engine
 - status
 - input path
 - output directory
-- report path
+- report path, including the MultiQC report path
 - error message
 - timestamps
 
@@ -58,7 +61,7 @@ the basic rule: PostgreSQL stores metadata and paths, not generated files.
 2. Nextflow runs FastQC per sample.
 3. Nextflow runs MultiQC over FastQC outputs.
 4. Reports are published to `results/qc`.
-5. The API stores metadata that points at the input and report paths.
+5. The API stores metadata that points at local output and report paths.
 6. Clients query the API for run status and metadata.
 
 ## Why Metadata Is Separate From Artifacts
