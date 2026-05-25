@@ -227,3 +227,7 @@ results/
 postgres_data/
 *.db
 *.sqlite
+
+# Agents
+
+.junie/memory

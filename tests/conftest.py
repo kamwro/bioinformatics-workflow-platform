@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 os.environ["DATABASE_URL"] = "sqlite://"
+os.environ["AUTO_CREATE_TABLES"] = "false"
 
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402

@@ -37,6 +37,10 @@ PostgreSQL stores structured metadata:
 It does not store FASTQ files, FastQC outputs, MultiQC reports, logs, or large
 workflow artifacts.
 
+Schema changes are managed with Alembic migrations. Local development uses the
+PostgreSQL database from `docker-compose.yml` and applies migrations with
+`uv run alembic upgrade head`.
+
 ### Nextflow
 
 Nextflow owns workflow execution. The current workflow is a minimal DSL2

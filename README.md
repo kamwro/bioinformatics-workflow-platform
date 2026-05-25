@@ -36,6 +36,7 @@ More detail is in [docs/architecture.md](docs/architecture.md).
 ```bash
 uv sync --extra dev
 docker compose up -d postgres
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 uv run pytest
 nextflow run pipelines/qc/main.nf -profile docker
@@ -90,8 +91,46 @@ The default connection string is:
 postgresql+psycopg://bioflowops:bioflowops@localhost:5433/bioflowops
 ```
 
-Tables are created on FastAPI startup for this MVP. Alembic is intentionally
-deferred until schema evolution becomes meaningful.
+Run database migrations before starting the API:
+
+```bash
+uv run alembic upgrade head
+```
+
+The first migration also upgrades older local MVP databases that already have a
+`qc_runs` table but are missing newer columns such as `run_name`.
+
+## Create Database Migrations
+
+Alembic has two separate steps:
+
+1. Create a migration file under `migrations/versions`.
+2. Apply migration files to the database.
+
+After changing SQLAlchemy models, create a new migration revision:
+
+```bash
+uv run alembic revision --autogenerate -m "describe schema change"
+```
+
+Review the generated file before applying it. Autogeneration is a starting
+point, not a substitute for checking the operations.
+
+Apply pending migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+Check whether the current database schema still differs from the SQLAlchemy
+models:
+
+```bash
+uv run alembic check
+```
+
+Use `upgrade head` to run existing migration files. It does not create new files
+in `migrations/versions`.
 
 ## Run the API
 
@@ -222,17 +261,15 @@ curl -X POST http://localhost:8000/qc-runs/register-local \
 
 ## Known limitations
 
-This is an MVP skeleton. It intentionally uses startup table creation instead of
-Alembic migrations, does not execute Nextflow from the API yet, has no frontend,
-no authentication, no cloud/Kubernetes deployment, and stores only metadata in
-PostgreSQL.
+This is an MVP skeleton. It does not execute Nextflow from the API yet, has no
+frontend, no authentication, no cloud/Kubernetes deployment, and stores only
+metadata in PostgreSQL.
 
 The API can register completed local workflow runs, but it intentionally does
 not execute or monitor Nextflow yet.
 
 ## Next Steps
 
-1. Add Alembic once schema changes start accumulating.
-2. Add pagination/filtering for QC run metadata.
-3. Consider a small CLI helper for registering local runs after Nextflow exits.
-4. Add a minimal frontend only after the API and workflow boundary are stable.
+1. Add pagination/filtering for QC run metadata.
+2. Consider a small CLI helper for registering local runs after Nextflow exits.
+3. Add a minimal frontend only after the API and workflow boundary are stable.

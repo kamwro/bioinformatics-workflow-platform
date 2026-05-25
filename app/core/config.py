@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = (
         "postgresql+psycopg://bioflowops:bioflowops@localhost:5433/bioflowops"
     )
-    AUTO_CREATE_TABLES: bool = True
+    AUTO_CREATE_TABLES: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

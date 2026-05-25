@@ -56,6 +56,12 @@ Start PostgreSQL:
 docker compose up -d postgres
 ```
 
+Run database migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
 Run the API:
 
 ```bash
