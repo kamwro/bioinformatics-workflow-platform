@@ -126,6 +126,13 @@ nextflow run pipelines/qc/main.nf -profile docker
 - ADRs should be professional, concise, and non-defensive.
 - Keep ADR status aligned with implementation reality.
 
+## Documentation Maintenance
+
+- Always check if `README.md`, `docs/architecture.md`, and `AGENTS.md` need
+  updating after making changes to the architecture, scope, or API.
+- Ensure that descriptions, commands, and examples in the documentation match
+  the current state of the implementation.
+
 ## Testing Expectations
 
 - Add or update pytest coverage for API behavior.
