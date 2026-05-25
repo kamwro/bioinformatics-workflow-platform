@@ -54,7 +54,7 @@ curl http://localhost:8000/qc-runs
 - Python 3.13+ or Python 3.14
 - uv for Python dependency management
 - Docker Desktop or Docker Engine
-- Nextflow and a Linux/WSL shell for running the QC workflow
+- Nextflow and Java 17+ in a Linux/WSL shell for running the QC workflow
 
 The API can be developed on Windows. The Nextflow command is documented for
 WSL/Linux because Docker path handling is much more predictable there.
@@ -219,10 +219,75 @@ uv run ruff format .
 
 ## Run the Nextflow QC Workflow
 
-From WSL/Linux at the repository root:
+Run the workflow from WSL/Linux at the repository root. On Windows, use WSL for
+Nextflow even if you develop the API from PowerShell.
+
+Install WSL from an elevated PowerShell prompt if it is not installed yet:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Install Java and basic shell tools inside WSL:
+
+```bash
+sudo apt update
+sudo apt install -y curl openjdk-17-jre
+java -version
+```
+
+Download and install Nextflow inside WSL:
+
+```bash
+curl -s https://get.nextflow.io | bash
+chmod +x nextflow
+mkdir -p "$HOME/.local/bin"
+mv nextflow "$HOME/.local/bin/"
+```
+
+Make sure `~/.local/bin` is on your WSL `PATH`. If needed, add it:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+nextflow -version
+```
+
+See the official Nextflow installation docs for the latest supported Java and
+installation options: https://nextflow.io/docs/latest/install.html
+
+On Windows with Docker Desktop, enable WSL integration for your Ubuntu
+distribution in Docker Desktop settings. Then confirm Docker works from WSL:
+
+```bash
+docker run --rm hello-world
+```
+
+Pre-pull the QC workflow containers:
+
+```bash
+docker pull quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0
+docker pull quay.io/biocontainers/multiqc:1.25.1--pyhdfd78af_0
+```
+
+If the MultiQC image pull fails with `docker: error getting credentials`, clear
+the stale Quay credential entry and pull again:
+
+```bash
+docker logout quay.io
+docker pull quay.io/biocontainers/multiqc:1.25.1--pyhdfd78af_0
+```
+
+Run the workflow:
 
 ```bash
 nextflow run pipelines/qc/main.nf -profile docker
+```
+
+Resume after fixing a failed container pull or interrupted run:
+
+```bash
+nextflow run pipelines/qc/main.nf -profile docker -resume
 ```
 
 Useful parameters:
