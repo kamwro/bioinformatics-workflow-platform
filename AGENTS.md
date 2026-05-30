@@ -16,6 +16,8 @@ FastQC and MultiQC.
 - PostgreSQL for metadata only.
 - Local/demo metadata seeding endpoint.
 - Completed local Nextflow QC run registration endpoint.
+- Local Python CLI for samplesheet validation and completed local run
+  registration.
 - Minimal Nextflow workflow: FASTQ to FastQC to MultiQC.
 - Tiny synthetic FASTQ fixtures for local testing.
 - Deterministic generated synthetic demo FASTQ data for richer local QC reports.
@@ -81,6 +83,27 @@ Register completed local QC run metadata:
 curl -X POST http://localhost:8000/qc-runs/register-local
 ```
 
+Run the full local QC workflow with the local CLI (preferred):
+
+```bash
+uv run bioqc help
+uv run python -m cli start
+```
+
+`start` prompts for the samplesheet, output directory, API URL, and run name,
+then validates, runs the Nextflow QC pipeline, finds the MultiQC report, and
+registers the completed run. The `validate` and `register-local` subcommands
+remain as manual escape hatches:
+
+```bash
+uv run python -m cli validate pipelines/qc/samplesheet.csv
+
+uv run python -m cli register-local \
+  --run-dir results/qc \
+  --samplesheet pipelines/qc/samplesheet.csv \
+  --api-url http://localhost:8000
+```
+
 Run tests:
 
 ```bash
@@ -113,6 +136,8 @@ nextflow run pipelines/qc/main.nf -profile docker
 - Keep FastAPI route handlers thin.
 - Put database access in repository modules.
 - Put API-facing behavior in service modules.
+- Keep local CLI behavior in `cli` small, standard-library-first,
+  and focused on local workflow helper tasks.
 - Use Pydantic v2 models for request and response schemas.
 - Use SQLAlchemy 2.x typed mappings with `Mapped[]` and `mapped_column`.
 - Store enum-like statuses as clear string values: `PENDING`, `RUNNING`,
@@ -151,6 +176,8 @@ nextflow run pipelines/qc/main.nf -profile docker
   serialization/model behavior.
 - Cover completed local QC run registration behavior when changing that
   endpoint, schema, or service.
+- Cover CLI samplesheet validation and MultiQC report discovery behavior when
+  changing `cli`.
 - Run `uv run pytest` before finishing when possible.
 
 ## Pull Request Descriptions
