@@ -1,0 +1,6 @@
+sample,fastq
+sample_good,pipelines/qc/demo_data/sample_good.fastq
+sample_low_quality,pipelines/qc/demo_data/sample_low_quality.fastq
+sample_gc_bias,pipelines/qc/demo_data/sample_gc_bias.fastq
+sample_duplicates,pipelines/qc/demo_data/sample_duplicates.fastq
+sample_adapter_contamination,pipelines/qc/demo_data/sample_adapter_contamination.fastq

@@ -18,6 +18,7 @@ FastQC and MultiQC.
 - Completed local Nextflow QC run registration endpoint.
 - Minimal Nextflow workflow: FASTQ to FastQC to MultiQC.
 - Tiny synthetic FASTQ fixtures for local testing.
+- Deterministic generated synthetic demo FASTQ data for richer local QC reports.
 - Documentation and ADRs that match the implementation.
 
 ## Do Not Build Yet
@@ -86,6 +87,12 @@ Run tests:
 uv run pytest
 ```
 
+Generate richer local demo FASTQ data:
+
+```bash
+uv run python scripts/generate_demo_fastq.py
+```
+
 Run lint/format:
 
 ```bash
@@ -121,6 +128,8 @@ nextflow run pipelines/qc/main.nf -profile docker
 - Use Docker containers for FastQC and MultiQC.
 - Publish outputs under a predictable `results/qc` directory by default.
 - Keep bundled FASTQ fixtures tiny, synthetic, and safe to commit.
+- Keep generated demo FASTQ data under `pipelines/qc/demo_data/` and do not
+  commit it.
 - Do not claim nf-core compliance. This project uses selected nf-core-inspired
   conventions only.
 
@@ -128,7 +137,8 @@ nextflow run pipelines/qc/main.nf -profile docker
 
 - Check `docs/adr/` before changing architecture, storage, workflow execution,
   or scope.
-- If implementation contradicts an ADR, update the ADR or add a new one.
+- Do not edit existing ADRs. Only add a new ADR. The new ADR may state that it
+  revises or supersedes an older ADR.
 - ADRs should be professional, concise, and non-defensive.
 - Keep ADR status aligned with implementation reality.
 

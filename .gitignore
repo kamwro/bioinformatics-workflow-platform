@@ -224,6 +224,7 @@ __marimo__/
 .nextflow.log*
 work/
 results/
+pipelines/qc/demo_data/
 postgres_data/
 *.db
 *.sqlite

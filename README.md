@@ -39,6 +39,7 @@ docker compose up -d postgres
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 uv run pytest
+uv run python scripts/generate_demo_fastq.py
 nextflow run pipelines/qc/main.nf -profile docker
 ```
 
@@ -299,9 +300,41 @@ nextflow run pipelines/qc/main.nf \
   --outdir results/qc
 ```
 
-The bundled samplesheet points at tiny synthetic FASTQ fixtures under
-`pipelines/qc/testdata/`. These files are intentionally small and not
-biologically meaningful.
+The bundled default samplesheet points at tiny synthetic FASTQ fixtures under
+`pipelines/qc/testdata/`. These files are committed to the repository for quick
+pipeline smoke tests. They are intentionally too small to produce visually rich
+FastQC or MultiQC reports.
+
+For a richer local demo report, generate deterministic synthetic demo data:
+
+```bash
+uv run python scripts/generate_demo_fastq.py
+```
+
+This writes FASTQ files under the ignored `pipelines/qc/demo_data/` directory
+and creates `pipelines/qc/samplesheet.demo.csv`. The demo samples are synthetic
+and designed to show quality, GC, duplication, and adapter-like differences in
+QC reports. They are not biologically meaningful and should not be used for
+interpretation.
+
+The generator supports local tuning:
+
+```bash
+uv run python scripts/generate_demo_fastq.py \
+  --reads 10000 \
+  --length 100 \
+  --seed 42 \
+  --outdir pipelines/qc/demo_data
+```
+
+Run the workflow with the generated demo samplesheet:
+
+```bash
+nextflow run pipelines/qc/main.nf \
+  -profile docker \
+  --input pipelines/qc/samplesheet.demo.csv \
+  --outdir results/demo
+```
 
 Expected outputs:
 
@@ -335,6 +368,22 @@ not execute or monitor Nextflow yet.
 
 ## Next Steps
 
-1. Add pagination/filtering for QC run metadata.
-2. Consider a small CLI helper for registering local runs after Nextflow exits.
-3. Add a minimal frontend only after the API and workflow boundary are stable.
+1. Add a small Python CLI for the local QC workflow:
+   - validate a samplesheet before running Nextflow,
+   - locate the generated MultiQC report,
+   - register a completed local workflow run through the API,
+   - print a short run summary for portfolio demos.
+2. Tighten the scientific-computing story:
+   - document the full local path from demo FASTQ generation to Nextflow output
+     to API registration,
+   - include an example report path and known-good demo command sequence,
+   - keep the README honest about the API/workflow boundary.
+3. Prepare the project for external feedback:
+   - open focused GitHub issues for the CLI and samplesheet validation,
+   - add a short portfolio summary once the CLI slice is working,
+   - prepare a LinkedIn/GitHub feedback post aimed at bioinformatics and
+     scientific-computing people.
+4. Keep pagination/filtering as the next API polish item after the CLI workflow
+   is useful.
+5. Keep frontend, workflow execution from the API, cloud, Kubernetes, and HPC
+   execution deferred until there is a clear ADR and the MVP boundary is stable.
