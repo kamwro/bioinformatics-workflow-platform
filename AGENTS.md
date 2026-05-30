@@ -152,3 +152,20 @@ nextflow run pipelines/qc/main.nf -profile docker
 - Cover completed local QC run registration behavior when changing that
   endpoint, schema, or service.
 - Run `uv run pytest` before finishing when possible.
+
+## Pull Request Descriptions
+
+- When asked to generate a pull request description, follow the structure in
+  `.github/pull_request_template.md`.
+- Always inspect both:
+  - staged changes with `git diff --cached --name-status` and
+    `git diff --cached --stat`,
+  - already committed branch changes with `git log origin/main..HEAD`,
+    `git diff --name-status origin/main..HEAD`, and
+    `git diff --stat origin/main..HEAD`.
+- Combine already committed branch changes and staged changes into one PR
+  description.
+- Clearly mention any relevant unstaged changes as not included in the PR
+  description unless the user asks to include them.
+- If `origin/main` is unavailable, compare against `main` and state that
+  fallback explicitly.
