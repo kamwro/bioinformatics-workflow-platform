@@ -399,10 +399,6 @@ source ~/.bashrc
 nextflow -version
 ```
 
-If the installer reports that `Nextflow 26.04.3` is available, that release is
-fine for this MVP. The workflow uses standard DSL2 and is not pinned to a
-specific Nextflow patch version.
-
 See the official Nextflow installation docs for the latest supported Java and
 installation options: https://nextflow.io/docs/latest/install.html
 
