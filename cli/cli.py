@@ -297,7 +297,7 @@ def collect_start_inputs(*, input_fn: Callable[[str], str] = input) -> StartInpu
     with path_completion():
         samplesheet = Path(
             prompt_with_default(
-                "Samplesheet path", DEFAULT_SAMPLESHEET, input_fn=input_fn
+                "Samplesheet path (use pipelines/qc/samplesheet.demo.csv if you generated demo data)", DEFAULT_SAMPLESHEET, input_fn=input_fn
             )
         )
         run_dir = Path(

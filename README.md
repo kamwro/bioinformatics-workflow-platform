@@ -267,7 +267,7 @@ $ uv run bioqc start
 BioQC Portal CLI
 Press Ctrl+C to cancel.
 
-Samplesheet path [pipelines/qc/samplesheet.csv]:
+Samplesheet path [pipelines/qc/samplesheet.csv] (use pipelines/qc/samplesheet.demo.csv if you generated demo data):
 Output directory [results/qc]:
 API URL [http://localhost:8000]:
 Run name [qc]:
