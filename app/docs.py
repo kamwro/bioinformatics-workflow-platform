@@ -9,9 +9,7 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 def _head_injection() -> str:
     dark_theme_css = (_STATIC_DIR / "swagger_dark.css").read_text(encoding="utf-8")
-    toggle_css = (_STATIC_DIR / "swagger_theme_toggle.css").read_text(
-        encoding="utf-8"
-    )
+    toggle_css = (_STATIC_DIR / "swagger_theme_toggle.css").read_text(encoding="utf-8")
     toggle_js = (_STATIC_DIR / "swagger_theme_toggle.js").read_text(encoding="utf-8")
 
     return (

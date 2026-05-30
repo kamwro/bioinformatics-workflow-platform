@@ -7,6 +7,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.qc_runs import router as qc_runs_router
 from app.core.config import settings
 from app.db.init_db import init_db
+from app.docs import register_swagger_ui
 
 
 @asynccontextmanager
@@ -21,7 +22,10 @@ app = FastAPI(
     version="0.1.0",
     description="Metadata API for a small bioinformatics QC workflow platform.",
     lifespan=lifespan,
+    docs_url=None,
 )
+
+register_swagger_ui(app)
 
 app.include_router(health_router)
 app.include_router(qc_runs_router)
