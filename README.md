@@ -144,6 +144,9 @@ Open:
 - API docs: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
 
+The Swagger UI at `/docs` has a light/dark switch in the top-right corner. It
+defaults to your OS color scheme and remembers your choice in the browser.
+
 ## API Examples
 
 Seed local demo metadata:

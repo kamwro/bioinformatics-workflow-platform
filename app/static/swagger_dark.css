@@ -1,0 +1,293 @@
+/* bioflowops-dark-theme : self-contained dark mode for Swagger UI (/docs).
+ *
+ * This is layered on top of the default swagger-ui.css. It is intentionally
+ * compact and dependency-free. If you want a more polished look, replace the
+ * body of this file with the Amoenus SwaggerDark theme - the injection in
+ * app/docs.py stays the same.
+ */
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #15171c;
+}
+
+.swagger-ui {
+  color: #d6d9df;
+}
+
+/* General text */
+.swagger-ui .info .title,
+.swagger-ui .info h1,
+.swagger-ui .info h2,
+.swagger-ui .info h3,
+.swagger-ui .info h4,
+.swagger-ui .info h5,
+.swagger-ui .info p,
+.swagger-ui .info li,
+.swagger-ui .info table,
+.swagger-ui label,
+.swagger-ui .opblock-tag,
+.swagger-ui .opblock .opblock-summary-path,
+.swagger-ui .opblock .opblock-summary-description,
+.swagger-ui .opblock .opblock-section-header h4,
+.swagger-ui .opblock .opblock-section-header label,
+.swagger-ui .opblock-description-wrapper p,
+.swagger-ui .opblock-external-docs-wrapper p,
+.swagger-ui .parameter__name,
+.swagger-ui .parameter__type,
+.swagger-ui table thead tr th,
+.swagger-ui table thead tr td,
+.swagger-ui .response-col_status,
+.swagger-ui .response-col_description,
+.swagger-ui .responses-inner h4,
+.swagger-ui .responses-inner h5,
+.swagger-ui .tab li,
+.swagger-ui .model-title,
+.swagger-ui .model,
+.swagger-ui section.models h4,
+.swagger-ui .renderedMarkdown p,
+.swagger-ui .renderedMarkdown li,
+.swagger-ui .servers-title,
+.swagger-ui .scheme-container .schemes > label {
+  color: #d6d9df;
+}
+
+/* Muted text */
+.swagger-ui .opblock-tag small,
+.swagger-ui .parameter__in,
+.swagger-ui .prop-format,
+.swagger-ui .model .property.primitive {
+  color: #9aa2ad;
+}
+
+/* Links */
+.swagger-ui a,
+.swagger-ui .info a,
+.swagger-ui .opblock-summary-path a {
+  color: #6cb6ff;
+}
+
+/* Top bar */
+.swagger-ui .topbar {
+  background-color: #0f1116;
+}
+
+/* Surfaces / containers */
+.swagger-ui .scheme-container,
+.swagger-ui section.models,
+.swagger-ui .model-box {
+  background-color: #1b1d24;
+  box-shadow: none;
+  border-color: #343843;
+}
+
+/* Operation blocks */
+.swagger-ui .opblock {
+  background: #1b1d24;
+  border-color: #343843;
+  box-shadow: none;
+}
+
+.swagger-ui .opblock .opblock-section-header {
+  background: #21242c;
+  box-shadow: none;
+}
+
+.swagger-ui .opblock-tag {
+  border-bottom-color: #343843;
+}
+
+.swagger-ui .opblock .opblock-summary {
+  border-color: #343843;
+}
+
+/* Tables */
+.swagger-ui table thead tr th,
+.swagger-ui table thead tr td,
+.swagger-ui table tbody tr td {
+  border-color: #343843;
+}
+
+/* Inputs */
+.swagger-ui input[type="text"],
+.swagger-ui input[type="password"],
+.swagger-ui input[type="email"],
+.swagger-ui input[type="search"],
+.swagger-ui input[type="number"],
+.swagger-ui textarea,
+.swagger-ui select {
+  background-color: #0f1116;
+  color: #d6d9df;
+  border: 1px solid #343843;
+}
+
+/* Code blocks and syntax highlight */
+.swagger-ui .highlight-code,
+.swagger-ui .highlight-code .microlight,
+.swagger-ui .curl-command,
+.swagger-ui .responses-inner pre,
+.swagger-ui .model-example pre,
+.swagger-ui .markdown code,
+.swagger-ui .renderedMarkdown code,
+.swagger-ui pre {
+  background-color: #0c0e13 !important;
+  color: #d6d9df;
+}
+
+/* Models */
+.swagger-ui section.models .model-container {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 0 12px;
+  overflow: hidden;
+  background: #20232b !important;
+  border-radius: 4px;
+}
+
+.swagger-ui section.models .model-container:hover {
+  background: #252934 !important;
+}
+
+.swagger-ui section.models .model-container > * {
+  box-sizing: border-box;
+  width: 100% !important;
+  background: transparent !important;
+}
+
+.swagger-ui section.models .model-box {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  width: 100% !important;
+  min-height: 44px;
+  background: transparent !important;
+  border: 0;
+  box-shadow: none !important;
+  padding: 12px 16px !important;
+}
+
+.swagger-ui section.models .model-box-control,
+.swagger-ui section.models .model-title,
+.swagger-ui section.models .model-toggle,
+.swagger-ui section.models .model-title *,
+.swagger-ui section.models .model-container > * > *,
+.swagger-ui section.models .model-container > * > * *,
+.swagger-ui section.models .model-box span,
+.swagger-ui section.models .model-box button,
+.swagger-ui section.models .model-box button *,
+.swagger-ui section.models .model-box code {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.swagger-ui section.models .model-box-control,
+.swagger-ui section.models .model-title,
+.swagger-ui section.models .model-toggle {
+  padding: 0 !important;
+}
+
+.swagger-ui section.models .model-title {
+  color: #e6e8ee !important;
+  font-weight: 700;
+}
+
+.swagger-ui section.models .model-toggle:after {
+  background: transparent !important;
+}
+
+.swagger-ui section.models article.json-schema-2020-12 {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 0 12px !important;
+  background: #20232b !important;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.swagger-ui section.models article.json-schema-2020-12:hover {
+  background: #252934 !important;
+}
+
+.swagger-ui section.models .json-schema-2020-12-head {
+  display: flex !important;
+  align-items: center;
+  width: 100% !important;
+  min-height: 44px;
+  padding: 12px 16px !important;
+  background: transparent !important;
+}
+
+.swagger-ui section.models .json-schema-2020-12,
+.swagger-ui section.models .json-schema-2020-12 *,
+.swagger-ui section.models .json-schema-2020-12-accordion,
+.swagger-ui section.models .json-schema-2020-12-accordion *,
+.swagger-ui section.models .json-schema-2020-12__title,
+.swagger-ui section.models .json-schema-2020-12-expand-deep-button,
+.swagger-ui section.models .json-schema-2020-12__attribute {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.swagger-ui section.models .json-schema-2020-12__title {
+  color: #e6e8ee !important;
+  font-weight: 700;
+}
+
+.swagger-ui section.models .json-schema-2020-12-expand-deep-button {
+  color: #b8c0cc !important;
+}
+
+.swagger-ui section.models .json-schema-2020-12__attribute {
+  color: #8b8cff !important;
+}
+
+/* Buttons */
+.swagger-ui .btn {
+  color: #d6d9df;
+  border-color: #4a4f5b;
+  background: #21242c;
+  box-shadow: none;
+}
+
+.swagger-ui .btn.cancel {
+  color: #ff8f8f;
+  border-color: #ff8f8f;
+}
+
+.swagger-ui .btn.authorize {
+  color: #7ee787;
+  border-color: #7ee787;
+}
+
+.swagger-ui .btn.authorize svg {
+  fill: #7ee787;
+}
+
+/* Collapse/expand arrows */
+.swagger-ui .model-toggle:after,
+.swagger-ui .expand-operation svg,
+.swagger-ui .opblock-summary-control svg {
+  filter: invert(85%);
+}
+
+/* Scrollbars (WebKit) */
+.swagger-ui ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.swagger-ui ::-webkit-scrollbar-track {
+  background: #15171c;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb {
+  background: #343843;
+  border-radius: 6px;
+}
