@@ -39,6 +39,7 @@ docker compose up -d postgres
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 uv run pytest
+uv run python scripts/generate_demo_fastq.py
 nextflow run pipelines/qc/main.nf -profile docker
 ```
 
@@ -201,6 +202,151 @@ curl -X POST http://localhost:8000/qc-runs/register-local \
 This endpoint only stores metadata for a run that already completed outside
 the API. It does not start, monitor, or parse a Nextflow execution.
 
+## Local CLI Usage
+
+The local CLI drives the full local QC workflow: validate the samplesheet, run
+the Nextflow QC pipeline, locate the MultiQC report, and register the completed
+run with the FastAPI metadata endpoint.
+
+```text
+samplesheet.csv -> CLI -> Nextflow/MultiQC -> FastAPI register-local endpoint
+```
+
+### Preferred: `bioqc start`
+
+Install the project into its virtual environment once:
+
+```bash
+uv sync --extra dev
+```
+
+This installs the `bioqc` command into the project's `.venv`. Note that
+`uv sync` does **not** activate that environment or add it to your `PATH`, so
+running `bioqc` directly afterward fails with `bioqc: command not found`. Run
+it through `uv`, which uses the project environment automatically:
+
+```bash
+uv run bioqc start
+```
+
+Show the BioQC quick-start help:
+
+```bash
+uv run bioqc help
+```
+
+If you want a bare `bioqc`, activate the environment first:
+
+```bash
+# Linux / macOS / WSL
+source .venv/bin/activate
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+bioqc start
+```
+
+You can also run the workflow without installing anything, straight from the
+module:
+
+```bash
+uv run python -m cli help
+uv run python -m cli start
+```
+
+> A `.venv` created on Windows cannot be reused from WSL or Linux (the script
+> shims differ). If you switch between shells, recreate it for the current OS
+> with `rm -rf .venv && uv sync --extra dev`.
+
+`start` prompts for the samplesheet, output directory, API URL, and an optional
+run name, then runs the whole local QC flow end to end:
+
+```text
+$ uv run bioqc start
+
+BioQC Portal CLI
+Press Ctrl+C to cancel.
+
+Samplesheet path [pipelines/qc/samplesheet.csv] (use pipelines/qc/samplesheet.demo.csv if you generated demo data):
+Output directory [results/qc]:
+API URL [http://localhost:8000]:
+Run name [qc]:
+
+✓ Samplesheet valid
+✓ Starting Nextflow QC workflow
+✓ Nextflow completed
+✓ Found MultiQC report: results/qc/multiqc/multiqc_report.html
+✓ Registered run in BioQC Portal
+
+Run registered successfully.
+```
+
+`start` requires `nextflow` to be on your PATH (see the Nextflow setup section
+above). The QC workflow samplesheet convention is:
+
+```csv
+sample,fastq
+sample_01,pipelines/qc/testdata/sample_01.fastq
+```
+
+### Optional: shell completion and path hints
+
+Tab completion is optional; the CLI works without it.
+
+On Linux or WSL, the interactive `bioqc start` prompts for **Samplesheet path**
+and **Output directory** support `Tab` completion of filesystem paths through the
+standard-library `readline` module. Shells without `readline` (for example stock
+Windows Python) fall back to plain input.
+
+Shell completion of subcommands and flags (`bioqc <TAB>`,
+`bioqc register-local --<TAB>`) is provided by `argcomplete`, which ships in the
+`dev` extra (`uv sync --extra dev`). Enable it in your shell:
+
+```bash
+eval "$(register-python-argcomplete bioqc)"
+```
+
+Add that line to `~/.bashrc` or `~/.zshrc` to make it persistent.
+
+### Advanced: manual validation and registration
+
+The individual commands remain available as manual escape hatches, for example
+when Nextflow was run separately or from CI.
+
+Validate a samplesheet without running anything else:
+
+```bash
+uv run python -m cli validate pipelines/qc/samplesheet.csv
+```
+
+The CLI checks that the CSV exists, has the required `sample` and `fastq`
+columns, has non-empty unique sample IDs, and has non-empty FASTQ paths. It
+does not require FASTQ files to exist during validation.
+
+Register an already-completed local run, skipping the Nextflow step:
+
+```bash
+uv run python -m cli register-local \
+  --run-dir results/qc \
+  --samplesheet pipelines/qc/samplesheet.csv \
+  --api-url http://localhost:8000
+```
+
+The command validates the samplesheet, searches `--run-dir` for exactly one
+`multiqc_report.html`, then posts run metadata to
+`/qc-runs/register-local`. By default, the run name comes from the run
+directory name and timestamps use the current UTC time. You can override them:
+
+```bash
+uv run python -m cli register-local \
+  --run-dir results/qc \
+  --samplesheet pipelines/qc/samplesheet.csv \
+  --api-url http://localhost:8000 \
+  --run-name local-qc-demo \
+  --started-at 2026-05-23T10:00:00Z \
+  --completed-at 2026-05-23T10:05:00Z
+```
+
 ## Run Tests
 
 ```bash
@@ -299,9 +445,41 @@ nextflow run pipelines/qc/main.nf \
   --outdir results/qc
 ```
 
-The bundled samplesheet points at tiny synthetic FASTQ fixtures under
-`pipelines/qc/testdata/`. These files are intentionally small and not
-biologically meaningful.
+The bundled default samplesheet points at tiny synthetic FASTQ fixtures under
+`pipelines/qc/testdata/`. These files are committed to the repository for quick
+pipeline smoke tests. They are intentionally too small to produce visually rich
+FastQC or MultiQC reports.
+
+For a richer local demo report, generate deterministic synthetic demo data:
+
+```bash
+uv run python scripts/generate_demo_fastq.py
+```
+
+This writes FASTQ files under the ignored `pipelines/qc/demo_data/` directory
+and creates `pipelines/qc/samplesheet.demo.csv`. The demo samples are synthetic
+and designed to show quality, GC, duplication, and adapter-like differences in
+QC reports. They are not biologically meaningful and should not be used for
+interpretation.
+
+The generator supports local tuning:
+
+```bash
+uv run python scripts/generate_demo_fastq.py \
+  --reads 10000 \
+  --length 100 \
+  --seed 42 \
+  --outdir pipelines/qc/demo_data
+```
+
+Run the workflow with the generated demo samplesheet:
+
+```bash
+nextflow run pipelines/qc/main.nf \
+  -profile docker \
+  --input pipelines/qc/samplesheet.demo.csv \
+  --outdir results/demo
+```
 
 Expected outputs:
 
@@ -335,6 +513,21 @@ not execute or monitor Nextflow yet.
 
 ## Next Steps
 
-1. Add pagination/filtering for QC run metadata.
-2. Consider a small CLI helper for registering local runs after Nextflow exits.
-3. Add a minimal frontend only after the API and workflow boundary are stable.
+1. Tighten the scientific-computing story:
+   - document the full local path from demo FASTQ generation to Nextflow output
+     to API registration,
+   - include an example report path and known-good demo command sequence,
+   - keep the README honest about the API/workflow boundary.
+2. Expand the local CLI only where it improves the demo:
+   - add optional samplesheet path existence checks,
+   - add a dry-run mode that prints the register-local payload,
+   - add a short run summary command if it stays simple.
+3. Prepare the project for external review:
+   - open focused GitHub issues for CLI polish and samplesheet validation,
+   - add a short portfolio summary once the CLI slice is working,
+   - prepare a LinkedIn/GitHub feedback post aimed at bioinformatics and
+     scientific-computing people.
+4. Keep pagination/filtering as the next API polish item after the CLI workflow
+   is useful.
+5. Keep frontend, workflow execution from the API, cloud, Kubernetes, and HPC
+   execution deferred until there is a clear ADR and the MVP boundary is stable.

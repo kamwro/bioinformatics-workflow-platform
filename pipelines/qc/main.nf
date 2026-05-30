@@ -1,8 +1,10 @@
 nextflow.enable.dsl = 2
 
 workflow {
+    def selected_samplesheet = params.input ?: params.samplesheet
+
     Channel
-        .fromPath(params.samplesheet, checkIfExists: true)
+        .fromPath(selected_samplesheet, checkIfExists: true)
         .splitCsv(header: true)
         .map { row -> tuple(row.sample, file(row.fastq)) }
         .set { reads_ch }
