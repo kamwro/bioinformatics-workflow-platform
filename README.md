@@ -1,68 +1,186 @@
 # BioFlowOps
 
-BioFlowOps is a bioinformatics workflow platform skeleton built as a portfolio
-project. It demonstrates Python backend/API engineering, PostgreSQL metadata
-tracking, and a small Nextflow DSL2 QC workflow around FastQC and MultiQC.
+BioFlowOps is a small, local **bioinformatics QC workflow platform**. It
+generates synthetic demo FASTQ data, runs a local Nextflow/MultiQC quality-control
+pipeline, then uploads the generated MultiQC report to a FastAPI backend that
+stores the run's metadata and the report artifact.
 
-This is not a clinical tool and not production-grade bioinformatics software.
-The goal is a small, honest first milestone that is easy to explain in an
-interview.
+The whole path runs on one machine and is driven by a single command
+(`bioqc start`). It is a portfolio MVP, not a clinical tool and not
+production-grade bioinformatics software. The goal is an honest, end-to-end slice
+that is easy to explain and easy to run.
 
-## MVP Scope
+## What this demonstrates
 
-The current MVP does four things:
+- A **Python CLI** that drives a real multi-step workflow end to end.
+- A **FastAPI** service for QC run metadata, with typed Pydantic schemas and
+  PostgreSQL persistence via SQLAlchemy + Alembic.
+- **Local artifact upload and storage**: the MultiQC HTML report is uploaded over
+  multipart and stored server-side, with its path recorded in the database.
+- **Nextflow/MultiQC workflow awareness**: a minimal DSL2 pipeline
+  (FASTQ → FastQC → MultiQC) using nf-core-inspired conventions (not full nf-core
+  compliance).
+- **Clear, testable MVP boundaries** between the API, the CLI, and the workflow
+  engine.
+- **Scientific-computing-style provenance**: each run records its samplesheet,
+  run directory, pipeline name/version, sample count, and the stored report.
 
-1. Runs a FastAPI service for QC run metadata.
-2. Stores workflow metadata and uploaded report artifact paths in PostgreSQL.
-3. Provides a demo seeding endpoint for local development.
-4. Includes a minimal Nextflow workflow: FASTQ to FastQC to MultiQC.
+## End-to-end flow
 
-It intentionally does not include React, authentication, cloud execution,
-Kubernetes, workflow queues, or clinical interpretation.
+```text
+generate demo FASTQ
+  → validate samplesheet
+  → run local Nextflow QC pipeline
+  → produce MultiQC report
+  → upload/register report via FastAPI
+  → store metadata and report artifact
+```
 
-## Architecture
+The **CLI owns the workflow**: it validates the samplesheet, runs Nextflow,
+locates the MultiQC report, and uploads it. The **API owns persistence**: it
+accepts the uploaded report, stores it under `artifacts/qc-runs/{run_id}/`, and
+records the run metadata in PostgreSQL. The API does **not** execute, schedule, or
+monitor Nextflow itself.
 
-FastAPI handles platform/API concerns. PostgreSQL stores metadata only.
-Nextflow handles workflow execution. FastQC performs per-sample FASTQ quality
-assessment. MultiQC aggregates FastQC outputs into a combined report.
+## Requirements
 
-Generated FASTQ-derived files, FastQC outputs, MultiQC reports, and workflow
-logs live on the filesystem or future artifact storage, not in PostgreSQL.
+The **API and CLI** run on native Windows, macOS, or Linux. The **Nextflow
+workflow** runs on Linux or macOS, or on Windows through WSL — so on Windows you
+drive `bioqc start` from a WSL shell while the API can stay on native Windows.
 
-More detail is in [docs/architecture.md](docs/architecture.md).
+| Tool | Used for | Install |
+| --- | --- | --- |
+| Python 3.13+ | API and CLI | [python.org/downloads](https://www.python.org/downloads/), or `uv python install 3.13` |
+| uv | Dependency management | [Install guide](https://docs.astral.sh/uv/getting-started/installation/) |
+| Docker | PostgreSQL + workflow containers | [Desktop](https://www.docker.com/products/docker-desktop/) (Windows/macOS) · [Engine](https://docs.docker.com/engine/install/) (Linux) |
+| Java 17+ | Required by Nextflow | [Temurin/Adoptium](https://adoptium.net/), `brew install openjdk@17` (macOS), or `apt install openjdk-17-jre` (Linux/WSL) |
+| Nextflow | Runs the QC pipeline | See per-OS notes below and the [official install guide](https://nextflow.io/docs/latest/install.html) |
 
-## Main commands
+### Installing Nextflow
+
+- **Linux / WSL** — install Java 17+, then `curl -s https://get.nextflow.io | bash`.
+  Full step-by-step (Java, Nextflow, Docker, container pre-pull) is in
+  [Run the Nextflow QC workflow](#run-the-nextflow-qc-workflow).
+- **macOS** — `brew install nextflow` (or the `curl` installer above); needs
+  Java 17+ (`brew install openjdk@17`). See the
+  [official install guide](https://nextflow.io/docs/latest/install.html).
+- **Windows** — Nextflow does **not** run natively on Windows. Run it inside
+  [WSL](https://learn.microsoft.com/windows/wsl/install) with Docker Desktop's WSL
+  integration enabled. The [Run the Nextflow QC workflow](#run-the-nextflow-qc-workflow)
+  section walks through the full WSL setup.
+
+## Full local demo
+
+Make sure the [Requirements](#requirements) are installed first. The fastest way
+to see the whole story. In the first terminal:
 
 ```bash
 uv sync --extra dev
 docker compose up -d postgres
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
-uv run pytest
 uv run python scripts/generate_demo_fastq.py
-nextflow run pipelines/qc/main.nf -profile docker
+uv run uvicorn app.main:app --reload
 ```
 
-Seed demo metadata:
+In a second terminal, run the local workflow and upload its report:
 
 ```bash
-curl -X POST http://localhost:8000/qc-runs/seed
+uv run bioqc start
+```
+
+`bioqc start` prompts for a samplesheet, output directory, API URL, and run name.
+Because the demo step above generated synthetic data, enter the demo samplesheet
+at the first prompt:
+
+```text
+Samplesheet path [pipelines/qc/samplesheet.csv]: pipelines/qc/samplesheet.demo.csv
+```
+
+Expected output:
+
+```text
+✓ Samplesheet valid
+✓ Starting Nextflow QC workflow
+✓ Nextflow completed
+✓ Found MultiQC report: results/qc/multiqc/multiqc_report.html
+✓ Uploaded MultiQC report to BioQC Portal
+
+Run registered successfully.
+```
+
+Then confirm the stored metadata:
+
+```bash
 curl http://localhost:8000/qc-runs
 ```
 
-## Prerequisites
+> **Nextflow must be on your PATH** for `bioqc start` (it shells out to
+> `nextflow run`). On Windows this means running the CLI from WSL, where Nextflow,
+> Java, and Docker are available — see
+> [Run the Nextflow QC workflow](#run-the-nextflow-qc-workflow). The API itself can
+> be developed and run from native Windows/PowerShell.
 
-- Python 3.13+ or Python 3.14
-- uv for Python dependency management
-- Docker Desktop or Docker Engine
-- Nextflow and Java 17+ in a Linux/WSL shell for running the QC workflow
+## Scope and boundaries
 
-The API can be developed on Windows. The Nextflow command is documented for
-WSL/Linux because Docker path handling is much more predictable there.
+This is deliberately a thin, honest MVP. What it does:
+
+- **The API** stores QC run metadata and the uploaded MultiQC report artifact.
+- **The CLI** runs the local workflow (validate → Nextflow → MultiQC) and uploads
+  the result to the API.
+
+What it does **not** do yet:
+
+- The API does **not** execute, schedule, or monitor Nextflow. It only registers
+  runs that already completed locally.
+- The demo data is **synthetic and not biologically meaningful**. It is shaped to
+  exercise FastQC/MultiQC metrics (quality, GC, duplication, adapters) and must
+  not be used for interpretation.
+- The project follows selected **nf-core-inspired conventions** but does **not**
+  claim nf-core compliance.
+
+### Deliberately out of scope / Not built yet
+
+- API-driven workflow orchestration (the API does not run Nextflow).
+- Remote or cloud execution (no Kubernetes, HPC, or batch backends).
+- Raw FASTQ upload or storage (only the generated MultiQC report is uploaded).
+- Production-grade artifact storage such as S3-compatible object storage.
+- Authentication and authorization.
+- A frontend / React UI.
+
+## The two register-local endpoints
+
+Both endpoints record a completed local run; they differ in how the report is
+handled:
+
+| Endpoint | Body | Report handling | Used by |
+| --- | --- | --- | --- |
+| `POST /qc-runs/register-local` | JSON | Records the **client-side report path** only; nothing is copied | Manual / debug escape hatch |
+| `POST /qc-runs/register-local-upload` | multipart | **Uploads and stores** the MultiQC report under `artifacts/qc-runs/{run_id}/` and records that backend-owned path | `bioqc start` |
+
+Use `register-local` when a run already completed elsewhere (for example in CI)
+and you only want a lightweight, path-based metadata record. Use
+`register-local-upload` — the path `bioqc start` takes — when you want the backend
+to own and store the report artifact.
+
+## Architecture
+
+FastAPI handles platform/API concerns. PostgreSQL stores metadata only. Nextflow
+owns workflow execution. FastQC performs per-sample FASTQ quality assessment, and
+MultiQC aggregates FastQC outputs into a combined report.
+
+Generated FASTQ-derived files, FastQC outputs, and MultiQC reports live on the
+filesystem (or future artifact storage), not in PostgreSQL. The database stores
+structured metadata and the paths that point at those artifacts.
+
+More detail is in [docs/architecture.md](docs/architecture.md) and the ADRs under
+[docs/adr](docs/adr).
 
 ## Setup
 
-Install Python dependencies:
+See [Requirements](#requirements) for the tools you need before running these
+steps.
+
+Install dependencies:
 
 ```bash
 uv sync --extra dev
@@ -80,7 +198,7 @@ Copy the environment example if you want local overrides:
 cp .env.example .env
 ```
 
-## Run PostgreSQL
+### Run PostgreSQL
 
 ```bash
 docker compose up -d postgres
@@ -92,7 +210,7 @@ The default connection string is:
 postgresql+psycopg://bioflowops:bioflowops@localhost:5433/bioflowops
 ```
 
-Run database migrations before starting the API:
+Apply migrations before starting the API:
 
 ```bash
 uv run alembic upgrade head
@@ -101,39 +219,7 @@ uv run alembic upgrade head
 The first migration also upgrades older local MVP databases that already have a
 `qc_runs` table but are missing newer columns such as `run_name`.
 
-## Create Database Migrations
-
-Alembic has two separate steps:
-
-1. Create a migration file under `migrations/versions`.
-2. Apply migration files to the database.
-
-After changing SQLAlchemy models, create a new migration revision:
-
-```bash
-uv run alembic revision --autogenerate -m "describe schema change"
-```
-
-Review the generated file before applying it. Autogeneration is a starting
-point, not a substitute for checking the operations.
-
-Apply pending migrations:
-
-```bash
-uv run alembic upgrade head
-```
-
-Check whether the current database schema still differs from the SQLAlchemy
-models:
-
-```bash
-uv run alembic check
-```
-
-Use `upgrade head` to run existing migration files. It does not create new files
-in `migrations/versions`.
-
-## Run the API
+### Run the API
 
 ```bash
 uv run uvicorn app.main:app --reload
@@ -147,192 +233,67 @@ Open:
 The Swagger UI at `/docs` has a light/dark switch in the top-right corner. It
 defaults to your OS color scheme and remembers your choice in the browser.
 
-## API Examples
+## Local CLI
 
-Seed local demo metadata:
-
-```bash
-curl -X POST http://localhost:8000/qc-runs/seed
-```
-
-List QC runs:
-
-```bash
-curl http://localhost:8000/qc-runs
-```
-
-Fetch a single run:
-
-```bash
-curl http://localhost:8000/qc-runs/1
-```
-
-Create a metadata record manually:
-
-```bash
-curl -X POST http://localhost:8000/qc-runs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sample_name": "sample_01",
-    "workflow_name": "fastqc-multiqc",
-    "workflow_version": "0.1.0",
-    "status": "PENDING",
-    "input_path": "pipelines/qc/testdata/sample_01.fastq",
-    "output_dir": "results/qc",
-    "report_path": null
-  }'
-```
-
-The API records paths and statuses only. It does not execute Nextflow yet.
-
-Register a completed local Nextflow QC run and upload the generated MultiQC
-HTML report:
-
-```bash
-curl -X POST http://localhost:8000/qc-runs/register-local-upload \
-  -F "run_name=local-qc-2026-05-23" \
-  -F "samplesheet_path=pipelines/qc/samplesheet.csv" \
-  -F "run_dir=results/qc" \
-  -F "pipeline_name=fastqc-multiqc" \
-  -F "pipeline_version=0.1.0" \
-  -F "multiqc_report=@results/qc/multiqc/multiqc_report.html;type=text/html"
-```
-
-The upload endpoint stores the report under `artifacts/qc-runs/{run_id}/` and
-records that backend-owned artifact path in the QC run metadata.
-
-The older JSON endpoint remains available as a lower-level path-only escape
-hatch for already-completed local runs:
-
-```bash
-curl -X POST http://localhost:8000/qc-runs/register-local \
-  -H "Content-Type: application/json" \
-  -d '{
-    "run_name": "local-qc-2026-05-23",
-    "workflow_name": "fastqc-multiqc",
-    "workflow_engine": "nextflow",
-    "status": "COMPLETED",
-    "output_path": "results/qc",
-    "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
-    "started_at": "2026-05-23T10:00:00Z",
-    "completed_at": "2026-05-23T10:05:00Z"
-  }'
-```
-
-This endpoint only stores metadata for a run that is already completed outside
-the API. It records the client-side report path instead of uploading the report
-artifact. It does not start, monitor, or parse a Nextflow execution.
-
-## Local CLI Usage
-
-The local CLI drives the full local QC workflow: validate the samplesheet, run
-the Nextflow QC pipeline, locate the MultiQC report, upload that HTML report to
-FastAPI, and register the completed run metadata.
-
-```text
-samplesheet.csv -> CLI -> Nextflow/MultiQC -> FastAPI register-local-upload endpoint
-```
+The CLI is the main entry point and the reason this project exists: it turns the
+multi-step local QC workflow into one command and hands the result to the API.
 
 ### Preferred: `bioqc start`
 
-Install the project into its virtual environment at once:
-
-```bash
-uv sync --extra dev
-```
-
-This installs the `bioqc` command into the project's `.venv`. Note that
-`uv sync` does **not** activate that environment or add it to your `PATH`, so
-running `bioqc` directly afterward fails with `bioqc: command not found`. Run
-it through `uv`, which uses the project environment automatically:
+`uv sync --extra dev` installs the `bioqc` command into the project's `.venv`.
+Note that `uv sync` does **not** activate that environment or add it to your
+`PATH`, so running a bare `bioqc` afterward fails with `command not found`. Run it
+through `uv`, which uses the project environment automatically:
 
 ```bash
 uv run bioqc start
 ```
 
-Show the BioQC quick-start help:
+Show the quick-start help:
 
 ```bash
 uv run bioqc help
 ```
 
-If you want a bare `bioqc`, activate the environment first:
-
-```bash
-# Linux / macOS / WSL
-source .venv/bin/activate
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-
-bioqc start
-```
-
-You can also run the workflow without installing anything, straight from the
-module:
-
-```bash
-uv run python -m cli help
-uv run python -m cli start
-```
-
-> A `.venv` created on Windows cannot be reused from WSL or Linux (the script
-> shims differ). If you switch between shells, recreate it for the current OS
-> with `rm -rf .venv && uv sync --extra dev`.
-
 `start` prompts for the samplesheet, output directory, API URL, and an optional
-run name, then runs the whole local QC flow end to end:
+run name, then runs the whole local QC flow: validate the samplesheet, run the
+Nextflow QC pipeline, locate the MultiQC report, upload that HTML report to the
+API, and register the completed run via `POST /qc-runs/register-local-upload`.
 
 ```text
-$ uv run bioqc start
-
-BioQC Portal CLI
-Press Ctrl+C to cancel.
-
-Samplesheet path [pipelines/qc/samplesheet.csv] (use pipelines/qc/samplesheet.demo.csv if you generated demo data):
-Output directory [results/qc]:
-API URL [http://localhost:8000]:
-Run name [qc]:
-
-✓ Samplesheet valid
-✓ Starting Nextflow QC workflow
-✓ Nextflow completed
-✓ Found MultiQC report: results/qc/multiqc/multiqc_report.html
-✓ Uploaded MultiQC report to BioQC Portal
-
-Run registered successfully.
+samplesheet.csv → CLI → Nextflow/MultiQC → FastAPI /qc-runs/register-local-upload
 ```
 
-`start` requires `nextflow` to be on your PATH (see the Nextflow setup section
-above). The QC workflow samplesheet convention is:
+The QC samplesheet convention is:
 
 ```csv
 sample,fastq
 sample_01,pipelines/qc/testdata/sample_01.fastq
 ```
 
-### Optional: shell completion and path hints
-
-Tab completion is optional; the CLI works without it.
-
-On Linux or WSL, the interactive `bioqc start` prompts for **Samplesheet path**
-and **Output directory** support `Tab` completion of filesystem paths through the
-standard-library `readline` module. Shells without `readline` (for example, stock
-Windows Python) fall back to plain input.
-
-Shell completion of subcommands and flags (`bioqc <TAB>`,
-`bioqc register-local --<TAB>`) is provided by `argcomplete`, which ships in the
-`dev` extra (`uv sync --extra dev`). Enable it in your shell:
+If you want a bare `bioqc`, activate the environment first, or run the module
+directly without installing the entry point:
 
 ```bash
-eval "$(register-python-argcomplete bioqc)"
+# Linux / macOS / WSL
+source .venv/bin/activate
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+bioqc start
+
+# Or, without activating:
+uv run python -m cli start
+uv run python -m cli help
 ```
 
-Add that line to `~/.bashrc` or `~/.zshrc` to make it persistent.
+> A `.venv` created on Windows cannot be reused from WSL or Linux (the script
+> shims differ). If you switch shells, recreate it for the current OS with
+> `rm -rf .venv && uv sync --extra dev`.
 
-### Advanced: manual validation and registration
+### Advanced: manual / debug commands
 
-The individual commands remain available as manual escape hatches, for example,
-when Nextflow was run separately or from CI.
+The individual commands remain available as escape hatches — for example, when
+Nextflow was run separately or from CI.
 
 Validate a samplesheet without running anything else:
 
@@ -340,11 +301,12 @@ Validate a samplesheet without running anything else:
 uv run python -m cli validate pipelines/qc/samplesheet.csv
 ```
 
-The CLI checks that the CSV exists, has the required `sample` and `fastq`
-columns, has non-empty unique sample IDs, and has non-empty FASTQ paths. It
-does not require FASTQ files to exist during validation.
+Validation checks that the CSV exists, has the required `sample` and `fastq`
+columns, has non-empty unique sample IDs, and has non-empty FASTQ paths. It does
+not require the FASTQ files to exist.
 
-Register an already-completed local run, skipping the Nextflow step:
+Register an already-completed local run, skipping the Nextflow step. This uses the
+lower-level JSON `register-local` endpoint (path-only, no upload):
 
 ```bash
 uv run python -m cli register-local \
@@ -354,44 +316,65 @@ uv run python -m cli register-local \
 ```
 
 The command validates the samplesheet, searches `--run-dir` for exactly one
-`multiqc_report.html`, then posts run metadata to
-`/qc-runs/register-local`. This manual command keeps the older JSON/path-based
-behavior; `bioqc start` uses the upload endpoint instead. By default, the run
-name comes from the run directory name and timestamps use the current UTC time.
-You can override them:
+`multiqc_report.html`, then posts the run metadata. By default the run name comes
+from the run directory name and timestamps use the current UTC time. Override them
+with `--run-name`, `--started-at`, and `--completed-at`.
+
+### Optional: shell completion and path hints
+
+Tab completion is optional; the CLI works without it.
+
+On Linux or WSL, the interactive `bioqc start` prompts for **Samplesheet path** and
+**Output directory** support `Tab` completion of filesystem paths through the
+standard-library `readline` module. Shells without `readline` (for example, stock
+Windows Python) fall back to plain input.
+
+Shell completion of subcommands and flags (`bioqc <TAB>`,
+`bioqc register-local --<TAB>`) is provided by `argcomplete`, which ships in the
+`dev` extra. Enable it in your shell:
 
 ```bash
-uv run python -m cli register-local \
-  --run-dir results/qc \
-  --samplesheet pipelines/qc/samplesheet.csv \
-  --api-url http://localhost:8000 \
-  --run-name local-qc-demo \
-  --started-at 2026-05-23T10:00:00Z \
-  --completed-at 2026-05-23T10:05:00Z
+eval "$(register-python-argcomplete bioqc)"
 ```
 
-## Run Tests
+Add that line to `~/.bashrc` or `~/.zshrc` to make it persistent.
+
+## Generate demo FASTQ data
+
+The bundled default samplesheet points at tiny synthetic FASTQ fixtures under
+`pipelines/qc/testdata/`. They are committed for quick smoke tests and are
+intentionally too small to produce visually rich FastQC or MultiQC reports.
+
+For a richer demo report, generate deterministic synthetic demo data:
 
 ```bash
-uv run pytest
+uv run python scripts/generate_demo_fastq.py
 ```
 
-Tests use an in-memory SQLite database override, so PostgreSQL is not required
-for the test suite.
+This writes FASTQ files under the ignored `pipelines/qc/demo_data/` directory and
+creates `pipelines/qc/samplesheet.demo.csv`. The demo samples (`sample_good`,
+`sample_low_quality`, `sample_gc_bias`, `sample_duplicates`,
+`sample_adapter_contamination`) are designed to show quality, GC, duplication, and
+adapter-like differences in QC reports. They are **synthetic, not biologically
+meaningful, and must not be used for interpretation.**
 
-## Lint and Format
+The generator supports local tuning:
 
 ```bash
-uv run ruff check .
-uv run ruff format .
+uv run python scripts/generate_demo_fastq.py \
+  --reads 10000 \
+  --length 100 \
+  --seed 42 \
+  --outdir pipelines/qc/demo_data
 ```
 
-## Run the Nextflow QC Workflow
+## Run the Nextflow QC workflow
 
-Run the workflow from WSL/Linux at the repository root. On Windows, use WSL for
-Nextflow even if you develop the API from PowerShell.
+`bioqc start` runs Nextflow for you. You can also run the pipeline directly from
+WSL/Linux at the repository root. On Windows, use WSL for Nextflow even if you
+develop the API from PowerShell.
 
-Install WSL from an elevated PowerShell prompt if it is not installed yet:
+Install WSL from an elevated PowerShell prompt if needed:
 
 ```powershell
 wsl --install -d Ubuntu
@@ -414,7 +397,7 @@ mkdir -p "$HOME/.local/bin"
 mv nextflow "$HOME/.local/bin/"
 ```
 
-Make sure `~/.local/bin` is on your WSL `PATH`. If needed, add it:
+Make sure `~/.local/bin` is on your WSL `PATH`:
 
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
@@ -422,11 +405,11 @@ source ~/.bashrc
 nextflow -version
 ```
 
-See the official Nextflow installation docs for the latest supported Java and
-installation options: https://nextflow.io/docs/latest/install.html
+See the official docs for supported Java and install options:
+https://nextflow.io/docs/latest/install.html
 
 On Windows with Docker Desktop, enable WSL integration for your Ubuntu
-distribution in Docker Desktop settings. Then confirm Docker works from WSL:
+distribution, then confirm Docker works from WSL:
 
 ```bash
 docker run --rm hello-world
@@ -439,8 +422,8 @@ docker pull quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0
 docker pull quay.io/biocontainers/multiqc:1.25.1--pyhdfd78af_0
 ```
 
-If the MultiQC image pull fails with `docker: error getting credentials`, clear
-the stale Quay credential entry and pull again:
+If the MultiQC pull fails with `docker: error getting credentials`, clear the
+stale Quay credential entry and pull again:
 
 ```bash
 docker logout quay.io
@@ -453,49 +436,13 @@ Run the workflow:
 nextflow run pipelines/qc/main.nf -profile docker
 ```
 
-Resume after fixing a failed container pull or interrupted run:
+Resume after a failed pull or interrupted run:
 
 ```bash
 nextflow run pipelines/qc/main.nf -profile docker -resume
 ```
 
-Useful parameters:
-
-```bash
-nextflow run pipelines/qc/main.nf \
-  -profile docker \
-  --samplesheet pipelines/qc/samplesheet.csv \
-  --outdir results/qc
-```
-
-The bundled default samplesheet points at tiny synthetic FASTQ fixtures under
-`pipelines/qc/testdata/`. These files are committed to the repository for quick
-pipeline smoke tests. They are intentionally too small to produce visually rich
-FastQC or MultiQC reports.
-
-For a richer local demo report, generate deterministic synthetic demo data:
-
-```bash
-uv run python scripts/generate_demo_fastq.py
-```
-
-This writes FASTQ files under the ignored `pipelines/qc/demo_data/` directory
-and creates `pipelines/qc/samplesheet.demo.csv`. The demo samples are synthetic
-and designed to show quality, GC, duplication, and adapter-like differences in
-QC reports. They are not biologically meaningful and should not be used for
-interpretation.
-
-The generator supports local tuning:
-
-```bash
-uv run python scripts/generate_demo_fastq.py \
-  --reads 10000 \
-  --length 100 \
-  --seed 42 \
-  --outdir pipelines/qc/demo_data
-```
-
-Run the workflow with the generated demo samplesheet:
+Run it against the generated demo samplesheet:
 
 ```bash
 nextflow run pipelines/qc/main.nf \
@@ -504,22 +451,103 @@ nextflow run pipelines/qc/main.nf \
   --outdir results/demo
 ```
 
+The pipeline accepts `--input` (preferred) or `--samplesheet`, plus `--outdir`.
+
 Expected outputs:
 
-- `results/qc/fastqc/` - per-sample FastQC HTML and ZIP files
-- `results/qc/multiqc/` - combined MultiQC report and data directory
-- `artifacts/qc-runs/{run_id}/multiqc_report.html` - API-owned uploaded report
-  after `bioqc start` registers the run
+- `results/qc/fastqc/` — per-sample FastQC HTML and ZIP files
+- `results/qc/multiqc/` — combined MultiQC report and data directory
+- `artifacts/qc-runs/{run_id}/multiqc_report.html` — API-owned uploaded report,
+  after `bioqc start` (or `register-local-upload`) registers the run
 
-After running the workflow separately, the lower-level JSON endpoint can still
-register metadata with paths such as `results/qc/multiqc/multiqc_report.html`:
+## Database migrations
+
+Alembic has two separate steps: creating a migration file, then applying it.
+
+After changing SQLAlchemy models, create a new revision:
+
+```bash
+uv run alembic revision --autogenerate -m "describe schema change"
+```
+
+Review the generated file before applying it — autogeneration is a starting point,
+not a substitute for checking the operations. Apply pending migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+Check whether the schema still differs from the models:
+
+```bash
+uv run alembic check
+```
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+Tests use an in-memory SQLite database override, so PostgreSQL is not required for
+the test suite.
+
+## Lint and format
+
+```bash
+uv run ruff check .
+uv run ruff format .
+```
+
+## API reference
+
+The API exposes metadata endpoints only; it records paths and statuses and does
+not execute Nextflow.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Health check |
+| `POST` | `/qc-runs/seed` | Seed local demo metadata |
+| `GET` | `/qc-runs` | List QC runs |
+| `GET` | `/qc-runs/{run_id}` | Fetch a single run |
+| `POST` | `/qc-runs` | Create a metadata record manually |
+| `POST` | `/qc-runs/register-local` | Register a completed run from paths (JSON, no upload) |
+| `POST` | `/qc-runs/register-local-upload` | Register a completed run and upload the MultiQC report (multipart) |
+
+Seed and list:
+
+```bash
+curl -X POST http://localhost:8000/qc-runs/seed
+curl http://localhost:8000/qc-runs
+curl http://localhost:8000/qc-runs/1
+```
+
+Register a completed local run and upload the MultiQC report (the `bioqc start`
+path):
+
+```bash
+curl -X POST http://localhost:8000/qc-runs/register-local-upload \
+  -F "run_name=local-qc-2026-05-23" \
+  -F "samplesheet_path=pipelines/qc/samplesheet.csv" \
+  -F "run_dir=results/qc" \
+  -F "pipeline_name=fastqc-multiqc" \
+  -F "pipeline_version=0.1.0" \
+  -F "multiqc_report=@results/qc/multiqc/multiqc_report.html;type=text/html"
+```
+
+The upload endpoint stores the report under `artifacts/qc-runs/{run_id}/` and
+records that backend-owned path in the run metadata.
+
+The lightweight JSON endpoint records only the client-side report path:
 
 ```bash
 curl -X POST http://localhost:8000/qc-runs/register-local \
   -H "Content-Type: application/json" \
   -d '{
-    "run_name": "local-qc-demo",
+    "run_name": "local-qc-2026-05-23",
     "workflow_name": "fastqc-multiqc",
+    "workflow_engine": "nextflow",
+    "status": "COMPLETED",
     "output_path": "results/qc",
     "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
     "started_at": "2026-05-23T10:00:00Z",
@@ -527,32 +555,11 @@ curl -X POST http://localhost:8000/qc-runs/register-local \
   }'
 ```
 
-## Known limitations
+## Next steps
 
-This is an MVP skeleton. It does not execute Nextflow from the API yet, has no
-frontend, no authentication, no cloud/Kubernetes deployment, and stores only
-metadata in PostgreSQL.
-
-The API can register completed local workflow runs, but it intentionally does
-not execute or monitor Nextflow yet.
-
-## Next Steps
-
-1. Tighten the scientific-computing story:
-   - document the full local path from demo FASTQ generation to Nextflow output
-     to API registration,
-   - include an example report path and known-good demo command sequence,
-   - keep the README honest about the API/workflow boundary.
-2. Expand the local CLI only where it improves the demo:
-   - add optional samplesheet path existence checks,
-   - add a dry-run mode that prints the register-local payload,
-   - add a short-run summary command if it stays simple.
-3. Prepare the project for external review:
-   - open focused GitHub issues for CLI polish and samplesheet validation,
-   - add a short portfolio summary once the CLI slice is working,
-   - prepare a LinkedIn/GitHub feedback post aimed at bioinformatics and
-     scientific-computing people.
-4. Keep pagination/filtering as the next API polish item after the CLI workflow
-   is useful.
-5. Keep frontend, workflow execution from the API, cloud, Kubernetes, and HPC
-   execution deferred until there is a clear ADR and the MVP boundary is stable.
+1. Tighten the local demo and provenance story (richer report examples, clearer
+   run summaries).
+2. Add API polish such as pagination and filtering once the CLI workflow is the
+   primary path.
+3. Keep workflow execution from the API, cloud, Kubernetes, and HPC execution
+   deferred until there is a clear ADR and the MVP boundary is stable.
