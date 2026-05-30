@@ -14,10 +14,13 @@ The API exposes metadata endpoints for QC workflow runs:
 - `GET /qc-runs`
 - `POST /qc-runs`
 - `POST /qc-runs/register-local`
+- `POST /qc-runs/register-local-upload`
 - `GET /qc-runs/{run_id}`
 
 It does not execute Nextflow in this MVP. It registers and exposes metadata
-records that point to inputs, output directories, and reports.
+records that point to inputs, output directories, and reports. The upload
+registration endpoint accepts a completed local MultiQC HTML report, stores it
+on the local filesystem, and records the stored artifact path.
 
 ### PostgreSQL
 
@@ -30,7 +33,8 @@ PostgreSQL stores structured metadata:
 - status
 - input path
 - output directory
-- report path, including the MultiQC report path
+- report filename
+- report path, including the backend-owned MultiQC report artifact path
 - error message
 - timestamps
 
@@ -55,7 +59,8 @@ FastQC outputs with MultiQC.
 
 ### Filesystem Artifacts
 
-For the MVP, workflow artifacts live under `results/qc` by default. A future
+For the MVP, workflow outputs live under `results/qc` by default, and API-owned
+uploaded report artifacts live under `artifacts/qc-runs/{run_id}/`. A future
 version could move artifacts to S3-compatible object storage without changing
 the basic rule: PostgreSQL stores metadata and paths, not generated files.
 
@@ -65,8 +70,10 @@ the basic rule: PostgreSQL stores metadata and paths, not generated files.
 2. Nextflow runs FastQC per sample.
 3. Nextflow runs MultiQC over FastQC outputs.
 4. Reports are published to `results/qc`.
-5. The API stores metadata that points at local output and report paths.
-6. Clients query the API for run status and metadata.
+5. The CLI uploads the generated MultiQC HTML report to the API.
+6. The API stores the uploaded report artifact locally.
+7. The API stores metadata that points at local output and stored report paths.
+8. Clients query the API for run status and metadata.
 
 ## Why Metadata Is Separate From Artifacts
 

@@ -13,7 +13,7 @@ interview.
 The current MVP does four things:
 
 1. Runs a FastAPI service for QC run metadata.
-2. Stores workflow metadata and report paths in PostgreSQL.
+2. Stores workflow metadata and uploaded report artifact paths in PostgreSQL.
 3. Provides a demo seeding endpoint for local development.
 4. Includes a minimal Nextflow workflow: FASTQ to FastQC to MultiQC.
 
@@ -185,7 +185,24 @@ curl -X POST http://localhost:8000/qc-runs \
 
 The API records paths and statuses only. It does not execute Nextflow yet.
 
-Register a completed local Nextflow QC run:
+Register a completed local Nextflow QC run and upload the generated MultiQC
+HTML report:
+
+```bash
+curl -X POST http://localhost:8000/qc-runs/register-local-upload \
+  -F "run_name=local-qc-2026-05-23" \
+  -F "samplesheet_path=pipelines/qc/samplesheet.csv" \
+  -F "run_dir=results/qc" \
+  -F "pipeline_name=fastqc-multiqc" \
+  -F "pipeline_version=0.1.0" \
+  -F "multiqc_report=@results/qc/multiqc/multiqc_report.html;type=text/html"
+```
+
+The upload endpoint stores the report under `artifacts/qc-runs/{run_id}/` and
+records that backend-owned artifact path in the QC run metadata.
+
+The older JSON endpoint remains available as a lower-level path-only escape
+hatch for already-completed local runs:
 
 ```bash
 curl -X POST http://localhost:8000/qc-runs/register-local \
@@ -202,22 +219,23 @@ curl -X POST http://localhost:8000/qc-runs/register-local \
   }'
 ```
 
-This endpoint only stores metadata for a run that already completed outside
-the API. It does not start, monitor, or parse a Nextflow execution.
+This endpoint only stores metadata for a run that is already completed outside
+the API. It records the client-side report path instead of uploading the report
+artifact. It does not start, monitor, or parse a Nextflow execution.
 
 ## Local CLI Usage
 
 The local CLI drives the full local QC workflow: validate the samplesheet, run
-the Nextflow QC pipeline, locate the MultiQC report, and register the completed
-run with the FastAPI metadata endpoint.
+the Nextflow QC pipeline, locate the MultiQC report, upload that HTML report to
+FastAPI, and register the completed run metadata.
 
 ```text
-samplesheet.csv -> CLI -> Nextflow/MultiQC -> FastAPI register-local endpoint
+samplesheet.csv -> CLI -> Nextflow/MultiQC -> FastAPI register-local-upload endpoint
 ```
 
 ### Preferred: `bioqc start`
 
-Install the project into its virtual environment once:
+Install the project into its virtual environment at once:
 
 ```bash
 uv sync --extra dev
@@ -279,7 +297,7 @@ Run name [qc]:
 ✓ Starting Nextflow QC workflow
 ✓ Nextflow completed
 ✓ Found MultiQC report: results/qc/multiqc/multiqc_report.html
-✓ Registered run in BioQC Portal
+✓ Uploaded MultiQC report to BioQC Portal
 
 Run registered successfully.
 ```
@@ -298,7 +316,7 @@ Tab completion is optional; the CLI works without it.
 
 On Linux or WSL, the interactive `bioqc start` prompts for **Samplesheet path**
 and **Output directory** support `Tab` completion of filesystem paths through the
-standard-library `readline` module. Shells without `readline` (for example stock
+standard-library `readline` module. Shells without `readline` (for example, stock
 Windows Python) fall back to plain input.
 
 Shell completion of subcommands and flags (`bioqc <TAB>`,
@@ -313,7 +331,7 @@ Add that line to `~/.bashrc` or `~/.zshrc` to make it persistent.
 
 ### Advanced: manual validation and registration
 
-The individual commands remain available as manual escape hatches, for example
+The individual commands remain available as manual escape hatches, for example,
 when Nextflow was run separately or from CI.
 
 Validate a samplesheet without running anything else:
@@ -337,8 +355,10 @@ uv run python -m cli register-local \
 
 The command validates the samplesheet, searches `--run-dir` for exactly one
 `multiqc_report.html`, then posts run metadata to
-`/qc-runs/register-local`. By default, the run name comes from the run
-directory name and timestamps use the current UTC time. You can override them:
+`/qc-runs/register-local`. This manual command keeps the older JSON/path-based
+behavior; `bioqc start` uses the upload endpoint instead. By default, the run
+name comes from the run directory name and timestamps use the current UTC time.
+You can override them:
 
 ```bash
 uv run python -m cli register-local \
@@ -488,9 +508,11 @@ Expected outputs:
 
 - `results/qc/fastqc/` - per-sample FastQC HTML and ZIP files
 - `results/qc/multiqc/` - combined MultiQC report and data directory
+- `artifacts/qc-runs/{run_id}/multiqc_report.html` - API-owned uploaded report
+  after `bioqc start` registers the run
 
-After running the workflow, metadata can be registered through the API with
-paths such as `results/qc/multiqc/multiqc_report.html`:
+After running the workflow separately, the lower-level JSON endpoint can still
+register metadata with paths such as `results/qc/multiqc/multiqc_report.html`:
 
 ```bash
 curl -X POST http://localhost:8000/qc-runs/register-local \
@@ -524,7 +546,7 @@ not execute or monitor Nextflow yet.
 2. Expand the local CLI only where it improves the demo:
    - add optional samplesheet path existence checks,
    - add a dry-run mode that prints the register-local payload,
-   - add a short run summary command if it stays simple.
+   - add a short-run summary command if it stays simple.
 3. Prepare the project for external review:
    - open focused GitHub issues for CLI polish and samplesheet validation,
    - add a short portfolio summary once the CLI slice is working,

@@ -1,11 +1,20 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.qc_run import QcRun, QcRunStatus
 from app.repositories.qc_runs import QcRunRepository
-from app.schemas.qc_run import QcRunCreate, QcRunRegisterLocal
+from app.schemas.qc_run import (
+    QcRunCreate,
+    QcRunRegisterLocal,
+    QcRunRegisterLocalUpload,
+)
+
+MULTIQC_REPORT_NAME = "multiqc_report.html"
 
 
 class QcRunService:
@@ -32,11 +41,57 @@ class QcRunService:
             workflow_engine=data.workflow_engine,
             workflow_version=data.workflow_version,
             status=data.status,
-            input_path=None,
+            input_path=data.samplesheet_path,
             output_dir=data.output_path,
             report_path=data.multiqc_report_path,
             started_at=data.started_at,
             finished_at=data.completed_at,
+        )
+        return self.repo.save(run)
+
+    def register_uploaded_local_run(
+        self,
+        data: QcRunRegisterLocalUpload,
+        *,
+        report_filename: str | None,
+        report_content: bytes,
+    ) -> QcRun:
+        clean_filename = self._clean_upload_filename(report_filename)
+        if clean_filename != MULTIQC_REPORT_NAME:
+            raise HTTPException(
+                status_code=400,
+                detail=f"multiqc_report filename must be {MULTIQC_REPORT_NAME}",
+            )
+        if not report_content:
+            raise HTTPException(
+                status_code=400,
+                detail="multiqc_report must not be empty",
+            )
+
+        run_id = str(uuid4())
+        storage_path = self._multiqc_report_storage_path(run_id)
+        try:
+            storage_path.parent.mkdir(parents=True, exist_ok=True)
+            storage_path.write_bytes(report_content)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not store uploaded MultiQC report",
+            ) from exc
+
+        run = QcRun(
+            id=run_id,
+            run_name=data.run_name,
+            sample_name=None,
+            workflow_name=data.pipeline_name,
+            workflow_engine="nextflow",
+            workflow_version=data.pipeline_version,
+            status=QcRunStatus.COMPLETED,
+            input_path=data.samplesheet_path,
+            output_dir=data.run_dir,
+            report_filename=clean_filename,
+            report_path=storage_path.as_posix(),
+            finished_at=datetime.now(UTC),
         )
         return self.repo.save(run)
 
@@ -61,6 +116,16 @@ class QcRunService:
                 status=QcRunStatus.PENDING,
                 input_path="pipelines/qc/testdata/sample_02.fastq",
                 output_dir="results/qc",
+                report_path=None,
             ),
         ]
         return self.repo.create_many(demo_runs)
+
+    def _multiqc_report_storage_path(self, run_id: str) -> Path:
+        return Path(settings.ARTIFACT_ROOT) / "qc-runs" / run_id / MULTIQC_REPORT_NAME
+
+    @staticmethod
+    def _clean_upload_filename(filename: str | None) -> str:
+        if filename is None:
+            return ""
+        return filename.replace("\\", "/").rsplit("/", maxsplit=1)[-1]

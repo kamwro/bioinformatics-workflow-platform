@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 REQUIRED_SAMPLESHEET_COLUMNS = ("sample", "fastq")
 MULTIQC_REPORT_NAME = "multiqc_report.html"
@@ -162,12 +163,55 @@ def register_local_run(
         "status": "COMPLETED",
         "output_path": str(run_dir),
         "multiqc_report_path": str(multiqc_report),
+        "samplesheet_path": str(samplesheet),
         "started_at": started_at or timestamp,
         "completed_at": completed_at or timestamp,
     }
 
     endpoint = f"{api_url.rstrip('/')}/qc-runs/register-local"
     return post_json(endpoint, payload)
+
+
+def register_local_run_upload(
+    *,
+    api_url: str,
+    run_dir: Path,
+    samplesheet: Path,
+    multiqc_report: Path,
+    run_name: str | None,
+    workflow_name: str,
+    workflow_version: str,
+    sample_count: int | None = None,
+) -> dict[str, Any]:
+    if not multiqc_report.exists():
+        raise CliError(f"MultiQC report not found: {multiqc_report}")
+    if not multiqc_report.is_file():
+        raise CliError(f"MultiQC report path is not a file: {multiqc_report}")
+    try:
+        if multiqc_report.stat().st_size == 0:
+            raise CliError(f"MultiQC report is empty: {multiqc_report}")
+    except OSError as exc:
+        raise CliError(
+            f"Could not inspect MultiQC report {multiqc_report}: {exc}"
+        ) from exc
+
+    fields = {
+        "run_name": run_name or default_run_name(run_dir),
+        "samplesheet_path": str(samplesheet),
+        "run_dir": str(run_dir),
+        "pipeline_name": workflow_name,
+        "pipeline_version": workflow_version,
+    }
+    if sample_count is not None:
+        fields["sample_count"] = str(sample_count)
+
+    endpoint = f"{api_url.rstrip('/')}/qc-runs/register-local-upload"
+    return post_multipart(
+        endpoint,
+        fields=fields,
+        file_field_name="multiqc_report",
+        file_path=multiqc_report,
+    )
 
 
 def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -208,6 +252,109 @@ def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise CliError(f"Backend response was JSON, but not an object:\n{body}")
 
     return parsed
+
+
+def post_multipart(
+    url: str,
+    *,
+    fields: dict[str, str],
+    file_field_name: str,
+    file_path: Path,
+    opener: Callable[..., Any] = urlopen,
+) -> dict[str, Any]:
+    try:
+        body, content_type = encode_multipart_form_data(
+            fields=fields,
+            file_field_name=file_field_name,
+            file_path=file_path,
+        )
+    except OSError as exc:
+        raise CliError(f"Could not read file for upload {file_path}: {exc}") from exc
+
+    request = Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": content_type,
+            "Content-Length": str(len(body)),
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with opener(request, timeout=30) as response:
+            response_body = response.read().decode("utf-8")
+            status = response.status
+    except HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        raise CliError(
+            f"Backend returned HTTP {exc.code} for {url}:\n"
+            f"{format_response_body(response_body)}"
+        ) from exc
+    except URLError as exc:
+        raise CliError(f"Could not connect to backend at {url}: {exc.reason}") from exc
+
+    if status < 200 or status >= 300:
+        raise CliError(
+            f"Backend returned HTTP {status} for {url}:\n"
+            f"{format_response_body(response_body)}"
+        )
+
+    try:
+        parsed = json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise CliError(
+            f"Backend response was not valid JSON:\n{response_body}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise CliError(
+            f"Backend response was JSON, but not an object:\n{response_body}"
+        )
+
+    return parsed
+
+
+def encode_multipart_form_data(
+    *,
+    fields: dict[str, str],
+    file_field_name: str,
+    file_path: Path,
+) -> tuple[bytes, str]:
+    boundary = f"----bioflowops-{uuid4().hex}"
+    body = bytearray()
+
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(
+            (
+                "Content-Disposition: form-data; "
+                f'name="{escape_multipart_header(name)}"'
+                "\r\n\r\n"
+            ).encode()
+        )
+        body.extend(str(value).encode("utf-8"))
+        body.extend(b"\r\n")
+
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(
+        (
+            "Content-Disposition: form-data; "
+            f'name="{escape_multipart_header(file_field_name)}"; '
+            f'filename="{escape_multipart_header(file_path.name)}"\r\n'
+            "Content-Type: text/html\r\n\r\n"
+        ).encode()
+    )
+    body.extend(file_path.read_bytes())
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode())
+
+    return bytes(body), f"multipart/form-data; boundary={boundary}"
+
+
+def escape_multipart_header(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def current_utc_timestamp() -> str:
@@ -297,7 +444,10 @@ def collect_start_inputs(*, input_fn: Callable[[str], str] = input) -> StartInpu
     with path_completion():
         samplesheet = Path(
             prompt_with_default(
-                "Samplesheet path (use pipelines/qc/samplesheet.demo.csv if you generated demo data)", DEFAULT_SAMPLESHEET, input_fn=input_fn
+                "Samplesheet path (use pipelines/qc/samplesheet.demo.csv "
+                "if you generated demo data)",
+                DEFAULT_SAMPLESHEET,
+                input_fn=input_fn,
             )
         )
         run_dir = Path(
@@ -389,9 +539,9 @@ Module form:
     --api-url http://localhost:8000
 
 Local flow:
-  samplesheet.csv -> CLI -> Nextflow/MultiQC -> FastAPI /qc-runs/register-local
+  samplesheet.csv -> CLI -> Nextflow/MultiQC -> FastAPI /qc-runs/register-local-upload
 
-Before register-local:
+Before registration:
   1. Start the API with: uv run uvicorn app.main:app --reload
   2. Make sure the run directory contains exactly one multiqc_report.html
 """
@@ -431,7 +581,7 @@ def start_workflow(
     inputs = collect_start_inputs(input_fn=input_fn)
     output_fn("")
 
-    validate_samplesheet(inputs.samplesheet)
+    validation = validate_samplesheet(inputs.samplesheet)
     output_fn(f"{SUCCESS_MARK} Samplesheet valid")
 
     output_fn(f"{SUCCESS_MARK} Starting Nextflow QC workflow")
@@ -441,17 +591,17 @@ def start_workflow(
     report = find_multiqc_report(inputs.run_dir)
     output_fn(f"{SUCCESS_MARK} Found MultiQC report: {report}")
 
-    response = register_local_run(
+    response = register_local_run_upload(
         api_url=inputs.api_url,
         run_dir=inputs.run_dir,
         samplesheet=inputs.samplesheet,
+        multiqc_report=report,
         run_name=inputs.run_name,
-        started_at=None,
-        completed_at=None,
         workflow_name=WORKFLOW_NAME,
         workflow_version=WORKFLOW_VERSION,
+        sample_count=validation.sample_count,
     )
-    output_fn(f"{SUCCESS_MARK} Registered run in BioQC Portal")
+    output_fn(f"{SUCCESS_MARK} Uploaded MultiQC report to BioQC Portal")
     output_fn("")
     output_fn("Run registered successfully.")
     print_run_summary(response, output_fn=output_fn)

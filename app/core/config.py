@@ -6,6 +6,7 @@ class Settings(BaseSettings):
         "postgresql+psycopg://bioflowops:bioflowops@localhost:5433/bioflowops"
     )
     AUTO_CREATE_TABLES: bool = False
+    ARTIFACT_ROOT: str = "artifacts"
 
     model_config = SettingsConfigDict(
         env_file=".env",

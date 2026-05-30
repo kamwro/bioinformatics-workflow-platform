@@ -63,6 +63,7 @@ class QcRun(Base):
     )
     input_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_dir: Mapped[str | None] = mapped_column(Text, nullable=True)
+    report_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     report_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(
@@ -91,6 +92,14 @@ class QcRun(Base):
 
     @property
     def multiqc_report_path(self) -> str | None:
+        return self.report_path
+
+    @property
+    def multiqc_report_filename(self) -> str | None:
+        return self.report_filename
+
+    @property
+    def multiqc_report_storage_path(self) -> str | None:
         return self.report_path
 
     @property

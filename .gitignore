@@ -226,6 +226,7 @@ work/
 results/
 pipelines/qc/demo_data/
 postgres_data/
+artifacts/
 *.db
 *.sqlite
 
