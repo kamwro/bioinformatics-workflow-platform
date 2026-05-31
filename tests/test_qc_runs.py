@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -179,6 +180,12 @@ def test_register_local_upload_accepts_and_stores_multiqc_report(
     stored_path = Path(body["multiqc_report_storage_path"])
     assert body["run_name"] == "uploaded-local-qc"
     assert body["status"] == "COMPLETED"
+    assert body["sample_count"] == 2
+    assert body["report_size_bytes"] == len(b"<html><body>MultiQC</body></html>")
+    assert (
+        body["report_sha256"]
+        == hashlib.sha256(b"<html><body>MultiQC</body></html>").hexdigest()
+    )
     assert body["input_path"] == "pipelines/qc/samplesheet.csv"
     assert body["output_path"] == "results/qc"
     assert body["report_filename"] == "multiqc_report.html"
@@ -192,6 +199,76 @@ def test_register_local_upload_accepts_and_stores_multiqc_report(
     assert db_run is not None
     assert db_run.report_filename == "multiqc_report.html"
     assert db_run.report_path == stored_path.as_posix()
+    assert db_run.sample_count == 2
+    assert db_run.report_size_bytes == len(b"<html><body>MultiQC</body></html>")
+    assert (
+        db_run.report_sha256
+        == hashlib.sha256(b"<html><body>MultiQC</body></html>").hexdigest()
+    )
+
+
+def test_register_local_upload_persists_sample_count_and_timing(
+    client: TestClient,
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    response = client.post(
+        "/qc-runs/register-local-upload",
+        data={
+            "run_name": "timed-run",
+            "sample_count": "3",
+            "started_at": "2026-05-23T08:00:00Z",
+            "completed_at": "2026-05-23T08:07:30Z",
+        },
+        files={
+            "multiqc_report": (
+                "multiqc_report.html",
+                b"<html></html>",
+                "text/html",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["sample_count"] == 3
+    assert body["started_at"].startswith("2026-05-23T08:00:00")
+    assert body["completed_at"].startswith("2026-05-23T08:07:30")
+    assert body["duration_seconds"] == 450.0
+
+    db_run = db.get(QcRun, body["id"])
+    assert db_run is not None
+    assert db_run.started_at is not None
+    assert db_run.finished_at is not None
+
+
+def test_register_local_upload_rejects_completed_before_started(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    response = client.post(
+        "/qc-runs/register-local-upload",
+        data={
+            "run_name": "backwards-timing",
+            "started_at": "2026-05-23T08:07:30Z",
+            "completed_at": "2026-05-23T08:00:00Z",
+        },
+        files={
+            "multiqc_report": (
+                "multiqc_report.html",
+                b"<html></html>",
+                "text/html",
+            )
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_register_local_upload_rejects_missing_multiqc_report(
@@ -259,6 +336,215 @@ def test_register_local_upload_uses_default_paths(
     body = response.json()
     assert body["input_path"] == "pipelines/qc/samplesheet.csv"
     assert body["output_path"] == "results/qc"
+
+
+def test_register_local_upload_rejects_naive_timestamps(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    response = client.post(
+        "/qc-runs/register-local-upload",
+        data={"run_name": "naive-ts", "started_at": "2026-05-23T08:00:00"},
+        files={
+            "multiqc_report": ("multiqc_report.html", b"<html></html>", "text/html")
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_local_rejects_naive_timestamps(client: TestClient) -> None:
+    response = client.post(
+        "/qc-runs/register-local",
+        json={
+            "run_name": "naive-json",
+            "status": "COMPLETED",
+            "output_path": "results/qc",
+            "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
+            "started_at": "2026-05-23T08:00:00",
+            "completed_at": "2026-05-23T08:07:00",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_download_multiqc_report_returns_uploaded_report(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+    content = b"<html><body>QC</body></html>"
+
+    created = client.post(
+        "/qc-runs/register-local-upload",
+        data={"run_name": "downloadable"},
+        files={"multiqc_report": ("multiqc_report.html", content, "text/html")},
+    ).json()
+
+    response = client.get(f"/qc-runs/{created['id']}/multiqc-report")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.content == content
+
+
+def test_download_multiqc_report_404_for_unknown_run(client: TestClient) -> None:
+    response = client.get("/qc-runs/not-a-real-id/multiqc-report")
+
+    assert response.status_code == 404
+
+
+def test_download_multiqc_report_404_for_path_only_registration(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/qc-runs/register-local",
+        json={
+            "run_name": "path-only",
+            "status": "COMPLETED",
+            "output_path": "results/qc",
+            "multiqc_report_path": "results/qc/multiqc/multiqc_report.html",
+            "started_at": "2026-05-23T08:00:00Z",
+            "completed_at": "2026-05-23T08:07:00Z",
+        },
+    ).json()
+
+    response = client.get(f"/qc-runs/{created['id']}/multiqc-report")
+
+    assert response.status_code == 404
+
+
+def test_download_multiqc_report_404_when_stored_file_missing(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    created = client.post(
+        "/qc-runs/register-local-upload",
+        data={"run_name": "vanishing"},
+        files={
+            "multiqc_report": ("multiqc_report.html", b"<html></html>", "text/html")
+        },
+    ).json()
+    Path(created["multiqc_report_storage_path"]).unlink()
+
+    response = client.get(f"/qc-runs/{created['id']}/multiqc-report")
+
+    assert response.status_code == 404
+
+
+def test_download_multiqc_report_refuses_path_outside_artifact_root(
+    client: TestClient,
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+    # A real, correctly named report file that lives outside the artifact store.
+    outside = tmp_path / "outside" / "multiqc_report.html"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("<html>secret</html>", encoding="utf-8")
+
+    run = QcRun(
+        run_name="sneaky-path",
+        status=QcRunStatus.COMPLETED,
+        report_filename="multiqc_report.html",
+        report_path=str(outside),
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    response = client.get(f"/qc-runs/{run.id}/multiqc-report")
+
+    # The file exists and is named correctly, but it is outside ARTIFACT_ROOT.
+    assert response.status_code == 404
+
+
+def test_download_multiqc_report_404_for_path_only_pointing_into_artifact_root(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    # A genuine upload creates a real report file under ARTIFACT_ROOT.
+    uploaded = client.post(
+        "/qc-runs/register-local-upload",
+        data={"run_name": "real-upload"},
+        files={
+            "multiqc_report": ("multiqc_report.html", b"<html>real</html>", "text/html")
+        },
+    ).json()
+
+    # A path-only record points its report path straight at that real file.
+    path_only = client.post(
+        "/qc-runs/register-local",
+        json={
+            "run_name": "path-only-pointer",
+            "status": "COMPLETED",
+            "output_path": "results/qc",
+            "multiqc_report_path": uploaded["multiqc_report_storage_path"],
+            "started_at": "2026-05-23T08:00:00Z",
+            "completed_at": "2026-05-23T08:07:00Z",
+        },
+    ).json()
+
+    # The path-only record must 404 (it owns no uploaded artifact), even though
+    # the file it points at exists under ARTIFACT_ROOT...
+    assert client.get(f"/qc-runs/{path_only['id']}/multiqc-report").status_code == 404
+    # ...while the real upload still serves correctly.
+    assert client.get(f"/qc-runs/{uploaded['id']}/multiqc-report").status_code == 200
+
+
+def test_download_multiqc_report_requires_this_runs_canonical_path(
+    client: TestClient,
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    monkeypatch.setattr(settings, "ARTIFACT_ROOT", str(artifact_root))
+
+    uploaded = client.post(
+        "/qc-runs/register-local-upload",
+        data={"run_name": "tamper"},
+        files={
+            "multiqc_report": ("multiqc_report.html", b"<html>x</html>", "text/html")
+        },
+    ).json()
+
+    # Repoint this run at a different, real report under ARTIFACT_ROOT.
+    other = artifact_root / "qc-runs" / "some-other-id" / "multiqc_report.html"
+    other.parent.mkdir(parents=True)
+    other.write_text("<html>other</html>", encoding="utf-8")
+    run = db.get(QcRun, uploaded["id"])
+    assert run is not None
+    run.report_path = str(other)
+    db.commit()
+
+    # The stored path is under ARTIFACT_ROOT and correctly named, but it is not
+    # this run's canonical location, so it must still 404.
+    response = client.get(f"/qc-runs/{uploaded['id']}/multiqc-report")
+    assert response.status_code == 404
+
+
+def test_duration_seconds_normalizes_naive_timestamps() -> None:
+    run = QcRun(
+        run_name="tz-mix",
+        status=QcRunStatus.COMPLETED,
+        started_at=datetime(2026, 5, 23, 8, 0, 0),
+        finished_at=datetime(2026, 5, 23, 8, 7, 30, tzinfo=UTC),
+    )
+
+    assert run.duration_seconds == 450.0
 
 
 def test_database_service_creates_run(db: Session) -> None:

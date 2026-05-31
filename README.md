@@ -513,6 +513,7 @@ not execute Nextflow.
 | `POST` | `/qc-runs` | Create a metadata record manually |
 | `POST` | `/qc-runs/register-local` | Register a completed run from paths (JSON, no upload) |
 | `POST` | `/qc-runs/register-local-upload` | Register a completed run and upload the MultiQC report (multipart) |
+| `GET` | `/qc-runs/{run_id}/multiqc-report` | Download a stored MultiQC report (backend-owned uploads only) |
 
 Seed and list:
 
@@ -532,11 +533,29 @@ curl -X POST http://localhost:8000/qc-runs/register-local-upload \
   -F "run_dir=results/qc" \
   -F "pipeline_name=fastqc-multiqc" \
   -F "pipeline_version=0.1.0" \
+  -F "sample_count=2" \
+  -F "started_at=2026-05-23T10:00:00Z" \
+  -F "completed_at=2026-05-23T10:05:00Z" \
   -F "multiqc_report=@results/qc/multiqc/multiqc_report.html;type=text/html"
 ```
 
 The upload endpoint stores the report under `artifacts/qc-runs/{run_id}/` and
-records that backend-owned path in the run metadata.
+records that backend-owned path in the run metadata. Alongside the path it records
+report integrity (`report_size_bytes`, `report_sha256`, both computed server-side)
+and the optional `sample_count`, `started_at`, and `completed_at` provenance
+fields; the run record then exposes `sample_count` and a derived
+`duration_seconds`. Timestamps must be timezone-aware (e.g. end with `Z`).
+`bioqc start` sends all of these automatically (it counts the samplesheet rows and
+times the Nextflow run) and prints them — including the report URL — in the run
+summary.
+
+Retrieve a stored report. Only backend-owned uploads under `artifacts/` are
+served; path-only `register-local` records and any path outside the artifact store
+return `404`:
+
+```bash
+curl -L http://localhost:8000/qc-runs/{run_id}/multiqc-report -o multiqc_report.html
+```
 
 The lightweight JSON endpoint records only the client-side report path:
 

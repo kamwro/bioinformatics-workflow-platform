@@ -1,6 +1,10 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse
+from pydantic import ValidationError
 
 from app.api.deps import get_qc_run_service
 from app.schemas.qc_run import (
@@ -65,15 +69,25 @@ async def register_local_qc_run_upload(
     pipeline_name: Annotated[str, Form()] = "fastqc-multiqc",
     pipeline_version: Annotated[str, Form()] = "0.1.0",
     sample_count: Annotated[int | None, Form()] = None,
+    started_at: Annotated[datetime | None, Form()] = None,
+    completed_at: Annotated[datetime | None, Form()] = None,
 ):
-    body = QcRunRegisterLocalUpload(
-        run_name=run_name,
-        samplesheet_path=samplesheet_path,
-        run_dir=run_dir,
-        pipeline_name=pipeline_name,
-        pipeline_version=pipeline_version,
-        sample_count=sample_count,
-    )
+    try:
+        body = QcRunRegisterLocalUpload(
+            run_name=run_name,
+            samplesheet_path=samplesheet_path,
+            run_dir=run_dir,
+            pipeline_name=pipeline_name,
+            pipeline_version=pipeline_version,
+            sample_count=sample_count,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+    except ValidationError as exc:
+        # The body is assembled from individual Form fields, so model-level
+        # validation runs here rather than during request parsing. Re-raise as a
+        # request validation error so callers get a consistent 422 response.
+        raise RequestValidationError(exc.errors()) from exc
     report_content = await multiqc_report.read()
     return service.register_uploaded_local_run(
         body,
@@ -85,3 +99,9 @@ async def register_local_qc_run_upload(
 @router.get("/{run_id}", response_model=QcRunRead)
 def get_qc_run(run_id: str, service: QcRunServiceDep):
     return service.get_run(run_id)
+
+
+@router.get("/{run_id}/multiqc-report")
+def download_multiqc_report(run_id: str, service: QcRunServiceDep) -> FileResponse:
+    report_path = service.get_uploaded_report_path(run_id)
+    return FileResponse(report_path, media_type="text/html")

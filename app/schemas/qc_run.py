@@ -91,6 +91,12 @@ class QcRunRegisterLocal(BaseModel):
     def normalize_workflow_engine(cls, value: str) -> str:
         return value.lower()
 
+    @field_validator("started_at", "completed_at")
+    @classmethod
+    def ensure_timezone_aware(cls, value: datetime) -> datetime:
+        _reject_naive_datetime(value)
+        return value
+
     @model_validator(mode="after")
     def validate_completed_run(self) -> Self:
         if self.status != QcRunStatus.COMPLETED:
@@ -158,11 +164,14 @@ class QcRunRead(BaseModel):
     workflow_engine: str
     workflow_version: str
     status: QcRunStatus
+    sample_count: int | None
     input_path: str | None
     output_dir: str | None
     output_path: str | None
     report_filename: str | None
     report_path: str | None
+    report_size_bytes: int | None
+    report_sha256: str | None
     multiqc_report_filename: str | None
     multiqc_report_path: str | None
     multiqc_report_storage_path: str | None
@@ -170,6 +179,7 @@ class QcRunRead(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     completed_at: datetime | None
+    duration_seconds: float | None
     created_at: datetime
     updated_at: datetime
 

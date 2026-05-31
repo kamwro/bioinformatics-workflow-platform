@@ -182,6 +182,8 @@ def register_local_run_upload(
     workflow_name: str,
     workflow_version: str,
     sample_count: int | None = None,
+    started_at: str | None = None,
+    completed_at: str | None = None,
 ) -> dict[str, Any]:
     if not multiqc_report.exists():
         raise CliError(f"MultiQC report not found: {multiqc_report}")
@@ -204,6 +206,10 @@ def register_local_run_upload(
     }
     if sample_count is not None:
         fields["sample_count"] = str(sample_count)
+    if started_at is not None:
+        fields["started_at"] = started_at
+    if completed_at is not None:
+        fields["completed_at"] = completed_at
 
     endpoint = f"{api_url.rstrip('/')}/qc-runs/register-local-upload"
     return post_multipart(
@@ -500,21 +506,43 @@ def run_nextflow_qc(
         )
 
 
+def format_duration(seconds: float) -> str:
+    total = int(round(seconds))
+    minutes, secs = divmod(total, 60)
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def build_report_url(api_url: str, run_id: str) -> str:
+    return f"{api_url.rstrip('/')}/qc-runs/{run_id}/multiqc-report"
+
+
 def print_run_summary(
     response: dict[str, Any],
     *,
+    api_url: str | None = None,
     output_fn: Callable[[str], None] = print,
 ) -> None:
     summary_fields = (
         ("Run ID", "id"),
         ("Run name", "run_name"),
         ("Status", "status"),
+        ("Samples", "sample_count"),
         ("MultiQC report", "multiqc_report_path"),
     )
     for label, key in summary_fields:
         value = response.get(key)
         if value is not None:
             output_fn(f"  {label}: {value}")
+
+    duration = response.get("duration_seconds")
+    if duration is not None:
+        output_fn(f"  Duration: {format_duration(duration)}")
+
+    run_id = response.get("id")
+    if api_url and run_id:
+        output_fn(f"  Report URL: {build_report_url(api_url, run_id)}")
 
 
 def bioqc_help_text() -> str:
@@ -585,7 +613,9 @@ def start_workflow(
     output_fn(f"{SUCCESS_MARK} Samplesheet valid")
 
     output_fn(f"{SUCCESS_MARK} Starting Nextflow QC workflow")
+    started_at = current_utc_timestamp()
     run_nextflow_qc(samplesheet=inputs.samplesheet, run_dir=inputs.run_dir)
+    completed_at = current_utc_timestamp()
     output_fn(f"{SUCCESS_MARK} Nextflow completed")
 
     report = find_multiqc_report(inputs.run_dir)
@@ -600,11 +630,13 @@ def start_workflow(
         workflow_name=WORKFLOW_NAME,
         workflow_version=WORKFLOW_VERSION,
         sample_count=validation.sample_count,
+        started_at=started_at,
+        completed_at=completed_at,
     )
     output_fn(f"{SUCCESS_MARK} Uploaded MultiQC report to BioQC Portal")
     output_fn("")
     output_fn("Run registered successfully.")
-    print_run_summary(response, output_fn=output_fn)
+    print_run_summary(response, api_url=inputs.api_url, output_fn=output_fn)
     return 0
 
 

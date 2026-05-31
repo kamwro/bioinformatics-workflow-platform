@@ -262,6 +262,38 @@ def test_register_local_run_upload_posts_expected_fields(
     assert calls["multipart"]["file_path"] == report
 
 
+def test_register_local_run_upload_includes_timestamps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "multiqc_report.html"
+    report.write_text("<html>report</html>", encoding="utf-8")
+    calls: dict[str, Any] = {}
+
+    def fake_post_multipart(url: str, **kwargs: Any) -> dict[str, Any]:
+        calls["multipart"] = {"url": url, **kwargs}
+        return {"id": "run-123", "status": "COMPLETED"}
+
+    monkeypatch.setattr(cli, "post_multipart", fake_post_multipart)
+
+    cli.register_local_run_upload(
+        api_url="http://host:9000/",
+        run_dir=Path("results/qc"),
+        samplesheet=Path("pipelines/qc/samplesheet.csv"),
+        multiqc_report=report,
+        run_name="demo-run",
+        workflow_name="fastqc-multiqc",
+        workflow_version="0.1.0",
+        sample_count=2,
+        started_at="2026-05-23T08:00:00Z",
+        completed_at="2026-05-23T08:07:00Z",
+    )
+
+    fields = calls["multipart"]["fields"]
+    assert fields["started_at"] == "2026-05-23T08:00:00Z"
+    assert fields["completed_at"] == "2026-05-23T08:07:00Z"
+
+
 def test_register_local_run_upload_rejects_empty_report(tmp_path: Path) -> None:
     report = tmp_path / "multiqc_report.html"
     report.write_bytes(b"")
@@ -366,6 +398,8 @@ def test_start_workflow_runs_end_to_end(
     assert calls["register"]["samplesheet"] == samplesheet
     assert calls["register"]["multiqc_report"] == report_dir / "multiqc_report.html"
     assert calls["register"]["sample_count"] == 1
+    assert calls["register"]["started_at"].endswith("Z")
+    assert calls["register"]["completed_at"].endswith("Z")
 
     printed = "\n".join(outputs)
     assert "Samplesheet valid" in printed
@@ -374,6 +408,47 @@ def test_start_workflow_runs_end_to_end(
     assert "Uploaded MultiQC report to BioQC Portal" in printed
     assert "Run registered successfully." in printed
     assert "run-123" in printed
+    assert "Report URL: http://host:9000/qc-runs/run-123/multiqc-report" in printed
+
+
+def test_format_duration_renders_minutes_and_seconds() -> None:
+    assert cli.format_duration(45.0) == "45s"
+    assert cli.format_duration(450.0) == "7m 30s"
+
+
+def test_print_run_summary_includes_samples_duration_and_report_url() -> None:
+    outputs: list[str] = []
+    cli.print_run_summary(
+        {
+            "id": "run-123",
+            "run_name": "demo-run",
+            "status": "COMPLETED",
+            "sample_count": 3,
+            "multiqc_report_path": "artifacts/qc-runs/run-123/multiqc_report.html",
+            "duration_seconds": 450.0,
+        },
+        api_url="http://host:9000/",
+        output_fn=outputs.append,
+    )
+
+    printed = "\n".join(outputs)
+    assert "Samples: 3" in printed
+    assert "Duration: 7m 30s" in printed
+    assert "Report URL: http://host:9000/qc-runs/run-123/multiqc-report" in printed
+
+
+def test_print_run_summary_omits_missing_optional_fields() -> None:
+    outputs: list[str] = []
+    cli.print_run_summary(
+        {"id": "run-123", "run_name": "demo-run", "status": "COMPLETED"},
+        output_fn=outputs.append,
+    )
+
+    printed = "\n".join(outputs)
+    assert "Samples:" not in printed
+    assert "Duration:" not in printed
+    # No api_url passed, so no report URL is emitted.
+    assert "Report URL:" not in printed
 
 
 def test_main_start_dispatches_to_start_workflow(

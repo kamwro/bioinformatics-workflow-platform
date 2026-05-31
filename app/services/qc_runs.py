@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -87,13 +88,46 @@ class QcRunService:
             workflow_engine="nextflow",
             workflow_version=data.pipeline_version,
             status=QcRunStatus.COMPLETED,
+            sample_count=data.sample_count,
             input_path=data.samplesheet_path,
             output_dir=data.run_dir,
             report_filename=clean_filename,
             report_path=storage_path.as_posix(),
-            finished_at=datetime.now(UTC),
+            report_size_bytes=len(report_content),
+            report_sha256=hashlib.sha256(report_content).hexdigest(),
+            started_at=data.started_at,
+            finished_at=data.completed_at or datetime.now(UTC),
         )
         return self.repo.save(run)
+
+    def get_uploaded_report_path(self, run_id: str) -> Path:
+        """Resolve a run's own backend-owned MultiQC report, refusing anything else.
+
+        Only runs created via ``register-local-upload`` own a stored artifact:
+        they carry server-computed integrity metadata and the canonical path
+        ``ARTIFACT_ROOT/qc-runs/{run_id}/multiqc_report.html``. Path-only
+        ``register-local`` records lack that metadata, and any ``report_path``
+        that is not exactly this run's canonical location is rejected. So a
+        record can never be used to serve another run's report or an arbitrary
+        file from disk, even one that happens to live under ``ARTIFACT_ROOT``.
+        """
+        run = self.get_run(run_id)
+        canonical = (
+            Path(settings.ARTIFACT_ROOT).resolve()
+            / "qc-runs"
+            / run.id
+            / MULTIQC_REPORT_NAME
+        )
+        owns_uploaded_report = (
+            run.report_filename == MULTIQC_REPORT_NAME
+            and run.report_size_bytes is not None
+            and run.report_sha256 is not None
+            and run.report_path is not None
+            and Path(run.report_path).resolve() == canonical
+        )
+        if not owns_uploaded_report or not canonical.is_file():
+            raise HTTPException(status_code=404, detail="MultiQC report not found")
+        return canonical
 
     def seed_demo_runs(self) -> list[QcRun]:
         now = datetime.now(UTC)
