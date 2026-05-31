@@ -233,3 +233,4 @@ artifacts/
 # Agents
 
 .junie/memory
+.claude/settings.local.json
