@@ -47,6 +47,12 @@ FastQC and MultiQC.
 
 ## Commands
 
+> This project uses a WSL/Linux virtualenv at `.venv`. Do not create a Windows
+> virtualenv. If `uv run pytest` or `uv run alembic` fail to spawn, the console
+> scripts are not linked on `PATH` in this venv — run them as modules instead:
+> `uv run --no-sync python -m pytest` and
+> `uv run --no-sync python -m alembic upgrade head`.
+
 Install dependencies:
 
 ```bash
