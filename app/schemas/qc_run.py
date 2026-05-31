@@ -11,6 +11,13 @@ DEFAULT_INPUT_PATH = "pipelines/qc/testdata/sample_01.fastq"
 DEFAULT_MULTIQC_REPORT_PATH = "results/qc/multiqc/multiqc_report.html"
 
 
+def _reject_naive_datetime(value: datetime | None) -> None:
+    if value is not None and value.tzinfo is None:
+        raise ValueError(
+            "must be timezone-aware (include a UTC offset, for example '...Z')"
+        )
+
+
 class QcRunCreate(BaseModel):
     run_name: str | None = Field(default=None, min_length=1, max_length=255)
     sample_name: str = Field(min_length=1, max_length=255)
@@ -107,6 +114,8 @@ class QcRunRegisterLocalUpload(BaseModel):
     pipeline_name: str = Field(default="fastqc-multiqc", min_length=1, max_length=100)
     pipeline_version: str = Field(default="0.1.0", min_length=1, max_length=50)
     sample_count: int | None = Field(default=None, ge=0)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     @field_validator(
         "run_name",
@@ -121,6 +130,22 @@ class QcRunRegisterLocalUpload(BaseModel):
         if not stripped:
             raise ValueError("must not be blank")
         return stripped
+
+    @field_validator("started_at", "completed_at")
+    @classmethod
+    def ensure_timezone_aware(cls, value: datetime | None) -> datetime | None:
+        _reject_naive_datetime(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_run_timing(self) -> Self:
+        if (
+            self.started_at is not None
+            and self.completed_at is not None
+            and self.completed_at < self.started_at
+        ):
+            raise ValueError("completed_at must be greater than or equal to started_at")
+        return self
 
 
 class QcRunRead(BaseModel):
