@@ -52,3 +52,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "e2e: subprocess tests that exercise the CLI and API over loopback HTTP",
+]

@@ -509,6 +509,20 @@ required for local unit tests. Migration regression tests use temporary SQLite
 databases to cover both a fresh install and adoption of the pre-Alembic schema,
 including row preservation and backfills.
 
+The end-to-end suite runs the CLI and Uvicorn as real subprocesses over loopback
+HTTP. A lightweight fake `nextflow` executable produces a deterministic MultiQC
+report, so the tests cover CLI prompting, workflow invocation, multipart upload,
+database persistence, API serialization, artifact storage, report download, and
+the failed-workflow path without requiring Docker or bioinformatics containers:
+
+```bash
+uv run pytest -m e2e -v
+```
+
+These tests are skipped on native Windows because the project runs Nextflow
+through WSL there. They run normally on Linux, macOS, WSL, and GitHub Actions and
+remain part of the default `uv run pytest` suite.
+
 API CI additionally starts PostgreSQL 18, applies every Alembic revision, and runs
 `alembic check`. CI is triggered by backend, CLI, migration, script, test, and
 database-configuration changes, and type-checks `app`, `cli`, and `scripts`. Its
