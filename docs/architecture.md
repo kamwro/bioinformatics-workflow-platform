@@ -45,6 +45,16 @@ Schema changes are managed with Alembic migrations. Local development uses the
 PostgreSQL database from `docker-compose.yml` and applies migrations with
 `uv run alembic upgrade head`.
 
+The bootstrap revision has an explicit compatibility path for databases created
+before Alembic was introduced. It recognizes that historical `qc_runs` shape,
+preserves its rows, backfills the new run and workflow-engine fields, and then
+applies the remaining revisions. Unknown existing table shapes fail closed so
+schema recovery remains an intentional operation.
+
+CI verifies the full migration chain against PostgreSQL 18 and checks for drift
+between the migrated schema and SQLAlchemy metadata. Lightweight regression tests
+also exercise fresh and legacy upgrade paths using disposable SQLite databases.
+
 ### Nextflow
 
 Nextflow owns workflow execution. The current workflow is a minimal DSL2

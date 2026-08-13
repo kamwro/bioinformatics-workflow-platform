@@ -35,7 +35,9 @@ def register_swagger_ui(app: FastAPI) -> None:
             openapi_url=app.openapi_url or "/openapi.json",
             title=f"{app.title} - Swagger UI",
         )
-        html = bytes(response.body).decode("utf-8").replace(
-            "</head>", f"{_head_injection()}</head>"
+        html = (
+            bytes(response.body)
+            .decode("utf-8")
+            .replace("</head>", f"{_head_injection()}</head>")
         )
         return HTMLResponse(html)

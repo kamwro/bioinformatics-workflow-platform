@@ -216,8 +216,12 @@ Apply migrations before starting the API:
 uv run alembic upgrade head
 ```
 
-The first migration also upgrades older local MVP databases that already have a
-`qc_runs` table but are missing newer columns such as `run_name`.
+The first migration also adopts the exact pre-Alembic MVP schema created by
+SQLAlchemy `create_all()`. Existing rows are preserved: `run_name` is backfilled
+from `sample_name` (falling back to the run ID), `workflow_engine` is backfilled
+as `nextflow`, and the legacy `sample_name` and `input_path` constraints are
+relaxed to match the current model. An existing `qc_runs` table with an unknown
+shape is rejected instead of being modified speculatively.
 
 ### Run the API
 
@@ -483,14 +487,35 @@ Check whether the schema still differs from the models:
 uv run alembic check
 ```
 
+The bootstrap migration supports two starting points:
+
+- an empty database, where it creates the current `qc_runs` schema;
+- the exact pre-Alembic `create_all()` schema, where it preserves existing rows,
+  adds and backfills `run_name` and `workflow_engine`, and brings constraints and
+  indexes in line with the current model.
+
+It intentionally fails for an unrecognized existing `qc_runs` shape. Inspect and
+migrate such a database explicitly rather than letting the bootstrap migration
+guess how its columns should map.
+
 ## Tests
 
 ```bash
 uv run pytest
 ```
 
-Tests use an in-memory SQLite database override, so PostgreSQL is not required for
-the test suite.
+Ordinary API tests use an in-memory SQLite database override, so PostgreSQL is not
+required for local unit tests. Migration regression tests use temporary SQLite
+databases to cover both a fresh install and adoption of the pre-Alembic schema,
+including row preservation and backfills.
+
+API CI additionally starts PostgreSQL 18, applies every Alembic revision, and runs
+`alembic check`. CI is triggered by backend, CLI, migration, script, test, and
+database-configuration changes, and type-checks `app`, `cli`, and `scripts`. Its
+security job uploads the generated SPDX SBOM and an informational Grype JSON
+vulnerability report as separate workflow artifacts. Vulnerability findings do
+not fail the build; the report is retained for inspection without treating
+SBOM-only findings as source-code locations.
 
 ## Lint and format
 
