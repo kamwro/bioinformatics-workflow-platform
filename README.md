@@ -511,7 +511,11 @@ including row preservation and backfills.
 
 API CI additionally starts PostgreSQL 18, applies every Alembic revision, and runs
 `alembic check`. CI is triggered by backend, CLI, migration, script, test, and
-database-configuration changes, and type-checks `app`, `cli`, and `scripts`.
+database-configuration changes, and type-checks `app`, `cli`, and `scripts`. Its
+security job uploads the generated SPDX SBOM and an informational Grype JSON
+vulnerability report as separate workflow artifacts. Vulnerability findings do
+not fail the build; the report is retained for inspection without treating
+SBOM-only findings as source-code locations.
 
 ## Lint and format
 

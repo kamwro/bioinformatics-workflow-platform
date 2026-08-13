@@ -88,7 +88,6 @@ jobs:
     needs: quality
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -98,6 +97,7 @@ jobs:
           path: .
           format: spdx-json
           output-file: sbom-api.spdx.json
+          upload-artifact: false
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
@@ -110,10 +110,11 @@ jobs:
         with:
           sbom: sbom-api.spdx.json
           fail-build: false
-          output-format: sarif
-          output-file: results.sarif
+          output-format: json
+          output-file: grype-results.json
 
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Upload vulnerability report
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: ./results.sarif
+          name: api-vulnerability-report
+          path: grype-results.json
