@@ -5,7 +5,12 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "cli/**"
+      - "migrations/**"
+      - "scripts/**"
       - "tests/**"
+      - "alembic.ini"
+      - "docker-compose.yml"
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
@@ -14,7 +19,12 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "cli/**"
+      - "migrations/**"
+      - "scripts/**"
       - "tests/**"
+      - "alembic.ini"
+      - "docker-compose.yml"
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
@@ -24,6 +34,20 @@ jobs:
   quality:
     name: Lint, Typecheck & Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: bioflowops
+          POSTGRES_USER: bioflowops
+          POSTGRES_PASSWORD: bioflowops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bioflowops -d bioflowops"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +70,14 @@ jobs:
         run: uv run ruff format --check .
 
       - name: mypy
-        run: uv run mypy app
+        run: uv run mypy app cli scripts
+
+      - name: Verify PostgreSQL migrations
+        env:
+          DATABASE_URL: postgresql+psycopg://bioflowops:bioflowops@localhost:5432/bioflowops
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
 
       - name: pytest
         run: uv run pytest -v
